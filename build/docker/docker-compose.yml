@@ -1,0 +1,64 @@
+version: "2.4"
+volumes:
+  go:
+
+services:
+  mysql:
+    image: mysql:5.7
+    restart: always
+    environment:
+      - MYSQL_ROOT_PASSWORD=gitea
+      - MYSQL_USER=gitea
+      - MYSQL_PASSWORD=gitea
+      - MYSQL_DATABASE=gitea
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "--silent"]
+
+  gitea:
+    image: gitea/gitea:latest
+    restart: always
+    depends_on:
+      - mysql
+    environment:
+      - DB_TYPE=mysql
+      - DB_HOST=mysql:3306
+      - DB_NAME=gitea
+      - DB_USER=gitea
+      - DB_PASSWD=gitea
+      - HTTP_PORT=13000
+    ports:
+      - "13000:13000"
+  
+  builder:
+    image: rucciva/golang:1.14.2-alpine
+    environment:
+      - GOCACHE=/go/build
+      - DB_TYPE=mysql
+      - DB_HOST=mysql:3306
+      - DB_NAME=gitea
+      - DB_USER=gitea
+      - DB_PASSWD=gitea
+    depends_on:
+      - mysql
+    working_dir: ${PWD}/../../
+    volumes:
+      - ${PWD}/../../:${PWD}/../../
+      - go:/go
+
+  tester:
+    image: rucciva/golang:1.14.2-alpine
+    depends_on:
+      mysql:
+        condition: service_healthy 
+    environment:
+      - GOCACHE=/go/buil
+      - DB_TYPE=mysql
+      - DB_HOST=mysql:3306
+      - DB_NAME=gitea
+      - DB_USER=gitea
+      - DB_PASSWD=gitea
+    working_dir: ${PWD}/../../
+    volumes:
+      - ${PWD}/../../:${PWD}/../../
+      - go:/go
+    command: go test ./...

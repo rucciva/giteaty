@@ -14,32 +14,40 @@ import (
 	"github.com/nmcclain/ldap"
 )
 
-type option = func(h *handler)
+type option = func(h *handler) error
+
+func Options() []option {
+	return make([]func(h *handler) error, 0, 4)
+}
 
 func WithBaseDN(baseDN string) option {
-	return func(h *handler) {
+	return func(h *handler) (err error) {
 		h.baseDN = newNames(baseDN)
+		return
 	}
 }
 
 func WithSearchers(usernames []string) option {
-	return func(h *handler) {
+	return func(h *handler) (err error) {
 		for _, u := range usernames {
 			h.searchers[u] = true
 		}
+		return
 	}
 }
 
 func WithCache(size, expireSecond int) option {
-	return func(h *handler) {
+	return func(h *handler) (err error) {
 		h.cache = freecache.NewCache(size)
 		h.cacheExpire = expireSecond
+		return
 	}
 }
 
 func WithModels(m gitea.Models) option {
-	return func(h *handler) {
+	return func(h *handler) (err error) {
 		h.models = m
+		return
 	}
 }
 
@@ -50,8 +58,7 @@ type handler struct {
 	userUAttr     string
 
 	groupParentRDN names
-	groupOrgUAttr  string
-	groupTeamUAttr string
+	groupUAttr     string
 
 	searchers map[string]bool
 
@@ -71,13 +78,14 @@ func New(opts ...option) (h *handler, err error) {
 		userUAttr:     "uid",
 
 		groupParentRDN: newNames("ou=groups"),
-		groupOrgUAttr:  "cn",
-		groupTeamUAttr: "cn",
+		groupUAttr:     "cn",
 
 		searchers: map[string]bool{"admin": true},
 	}
 	for _, opt := range opts {
-		opt(h)
+		if err = opt(h); err != nil {
+			return
+		}
 	}
 	for u := range h.searchers {
 		delete(h.searchers, u)
@@ -119,8 +127,12 @@ func (h *handler) getUserDN(username string) string {
 	return fmt.Sprintf("%s=%s,%s,%s", h.userUAttr, username, h.userParentRDN, h.baseDN)
 }
 
-func (h *handler) getGroupDN(org, team string) string {
-	return fmt.Sprintf("%s=%s,%s=%s,%s,%s", h.groupTeamUAttr, team, h.groupOrgUAttr, org, h.groupParentRDN, h.baseDN)
+func (h *handler) getTeamDN(org, team string) string {
+	return fmt.Sprintf("%s=%s[%s],%s,%s", h.groupUAttr, org, team, h.groupParentRDN, h.baseDN)
+}
+
+func (h *handler) getOrgDN(org string) string {
+	return fmt.Sprintf("%s=%s,%s,%s", h.groupUAttr, org, h.groupParentRDN, h.baseDN)
 }
 
 func (h *handler) checkSearchPermission(boundDN string, searchReq ldap.SearchRequest) error {
@@ -141,15 +153,16 @@ func (h *handler) listUsers() (entries []*ldap.Entry, err error) {
 	if err != nil {
 		return
 	}
+	orgs, _, err := h.models.SearchUsers(&models.SearchUserOptions{Type: models.UserTypeOrganization})
+	if err != nil {
+		return
+	}
+	orgByID := map[int64]*models.User{}
+	for _, org := range orgs {
+		orgByID[org.ID] = org
+	}
+
 	for _, user := range users {
-		orgs, err := h.models.GetOrgsByUserID(user.ID, true)
-		if err != nil {
-			return nil, err
-		}
-		orgByID := map[int64]*models.User{}
-		for _, org := range orgs {
-			orgByID[org.ID] = org
-		}
 		teams, err := h.models.GetUserTeams(user.ID, models.ListOptions{})
 		if err != nil {
 			return nil, err
@@ -162,12 +175,17 @@ func (h *handler) listUsers() (entries []*ldap.Entry, err error) {
 			attrs = append(attrs, &ldap.EntryAttribute{Name: "mail", Values: []string{user.Email}})
 		}
 		var memberOf []string
+		memberOfOrg := map[int64]bool{}
 		for _, team := range teams {
 			org, ok := orgByID[team.OrgID]
 			if !ok {
 				continue
 			}
-			memberOf = append(memberOf, h.getGroupDN(org.Name, team.Name))
+			if !memberOfOrg[team.OrgID] {
+				memberOf = append(memberOf, h.getOrgDN(org.Name))
+				memberOfOrg[team.OrgID] = true
+			}
+			memberOf = append(memberOf, h.getTeamDN(org.Name, team.Name))
 		}
 		if len(memberOf) > 0 {
 			attrs = append(attrs, &ldap.EntryAttribute{Name: "memberOf", Values: memberOf})
@@ -211,14 +229,17 @@ func (h *handler) Search(boundDN string, searchReq ldap.SearchRequest, conn net.
 		return ldap.ServerSearchResult{ResultCode: ldap.LDAPResultInsufficientAccessRights}, err
 	}
 
-	filterEntity, err := ldap.GetFilterObjectClass(searchReq.Filter)
+	class, err := ldap.GetFilterObjectClass(searchReq.Filter)
 	if err != nil {
 		return ldap.ServerSearchResult{ResultCode: ldap.LDAPResultOperationsError},
 			fmt.Errorf("Search Error: error parsing filter: %s", searchReq.Filter)
 	}
-	if !strings.EqualFold("inetorgperson", filterEntity) {
+	switch strings.ToLower(class) {
+	case "":
+	case "inetorgperson":
+	default:
 		return ldap.ServerSearchResult{ResultCode: ldap.LDAPResultOperationsError},
-			fmt.Errorf("Search Error: unhandled filter type: %s [%s]", filterEntity, searchReq.Filter)
+			fmt.Errorf("Search Error: unhandled filter type: %s [%s]", class, searchReq.Filter)
 	}
 
 	entries, err := h.listUsersCached()

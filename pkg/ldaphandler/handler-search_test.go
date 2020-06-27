@@ -65,10 +65,12 @@ func TestSearch(t *testing.T) {
 					{Name: "displayName", Values: []string{"user me"}},
 					{Name: "mail", Values: []string{"user@domain.com"}},
 					{Name: "memberOf", Values: []string{
-						h.getGroupDN("org", "team"),
-						h.getGroupDN("org", "team1"),
-						h.getGroupDN("org1", "team2"),
-						h.getGroupDN("org1", "team3"),
+						h.getOrgDN("org"),
+						h.getTeamDN("org", "team"),
+						h.getTeamDN("org", "team1"),
+						h.getOrgDN("org1"),
+						h.getTeamDN("org1", "team2"),
+						h.getTeamDN("org1", "team3"),
 					}},
 					{Name: "objectClass", Values: []string{"inetorgperson"}},
 					{Name: "ou", Values: []string{"users"}},
@@ -83,6 +85,10 @@ func TestSearch(t *testing.T) {
 				{ID: 5, Name: "org3"},
 			},
 			teams: []*models.Team{
+				{ID: 0, OrgID: 2, Name: "team"},
+				{ID: 1, OrgID: 2, Name: "team1"},
+				{ID: 2, OrgID: 3, Name: "team2"},
+				{ID: 3, OrgID: 3, Name: "team3"},
 				{ID: 4, OrgID: 4, Name: "team4"},
 				{ID: 5, OrgID: 4, Name: "team5"},
 				{ID: 6, OrgID: 5, Name: "team6"},
@@ -96,10 +102,18 @@ func TestSearch(t *testing.T) {
 					{Name: "displayName", Values: []string{"user1 me"}},
 					{Name: "mail", Values: []string{"user1@domain.com"}},
 					{Name: "memberOf", Values: []string{
-						h.getGroupDN("org2", "team4"),
-						h.getGroupDN("org2", "team5"),
-						h.getGroupDN("org3", "team6"),
-						h.getGroupDN("org3", "team7"),
+						h.getOrgDN("org"),
+						h.getTeamDN("org", "team"),
+						h.getTeamDN("org", "team1"),
+						h.getOrgDN("org1"),
+						h.getTeamDN("org1", "team2"),
+						h.getTeamDN("org1", "team3"),
+						h.getOrgDN("org2"),
+						h.getTeamDN("org2", "team4"),
+						h.getTeamDN("org2", "team5"),
+						h.getOrgDN("org3"),
+						h.getTeamDN("org3", "team6"),
+						h.getTeamDN("org3", "team7"),
 					}},
 					{Name: "objectClass", Values: []string{"inetorgperson"}},
 					{Name: "ou", Values: []string{"users"}},
@@ -137,9 +151,9 @@ func TestSearch(t *testing.T) {
 			},
 		},
 	}
-	users, entries := []*models.User{}, []*ldap.Entry{}
+	users, groups, entries := []*models.User{}, []*models.User{}, []*ldap.Entry{}
 	for _, dat := range data {
-		users, entries = append(users, dat.user), append(entries, dat.entry)
+		users, groups, entries = append(users, dat.user), append(groups, dat.orgs...), append(entries, dat.entry)
 	}
 	cacheMissCount := 2
 
@@ -150,10 +164,10 @@ func TestSearch(t *testing.T) {
 	mdl.EXPECT().
 		SearchUsers(reflectEq{&models.SearchUserOptions{}}).
 		Return(users, int64(len(users)), nil).Times(cacheMissCount)
+	mdl.EXPECT().
+		SearchUsers(reflectEq{&models.SearchUserOptions{Type: models.UserTypeOrganization}}).
+		Return(groups, int64(len(groups)), nil).Times(cacheMissCount)
 	for _, dat := range data {
-		mdl.EXPECT().
-			GetOrgsByUserID(gomock.Eq(dat.user.ID), gomock.Eq(true)).
-			Return(dat.orgs, nil).Times(cacheMissCount)
 		mdl.EXPECT().
 			GetUserTeams(gomock.Eq(dat.user.ID), reflectEq{models.ListOptions{}}).
 			Return(dat.teams, nil).Times(cacheMissCount)
@@ -167,7 +181,7 @@ func TestSearch(t *testing.T) {
 			res, err := h.Search(h.getUserDN("admin"), req, nil)
 			require.NoError(t, err, "should not return error")
 			assert.Equal(t, ldap.LDAPResultCode(ldap.LDAPResultSuccess), res.ResultCode)
-			assert.ElementsMatchf(t, entries, res.Entries, "\n%s\nshould match\n%s", toJSONString(res), toJSONString(entries))
+			assert.ElementsMatchf(t, entries, res.Entries, "\n%s\nshould match\n%s", toJSONString(res.Entries), toJSONString(entries))
 		}
 		if i < cacheMissCount-1 {
 			<-time.After(time.Duration(h.cacheExpire) * time.Second) // wait cache expire

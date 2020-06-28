@@ -5,6 +5,7 @@ import (
 	"encoding/gob"
 	"fmt"
 	"net"
+	"strconv"
 	"strings"
 
 	"code.gitea.io/gitea/models"
@@ -148,6 +149,23 @@ func (h *handler) checkSearchPermission(boundDN string, searchReq ldap.SearchReq
 	return nil
 }
 
+func (h *handler) getMemberOf(orgByID map[int64]*models.User, teams []*models.Team) (memberOf []string) {
+	memberOfOrg := map[int64]bool{}
+	for _, team := range teams {
+		org, ok := orgByID[team.OrgID]
+		if !ok {
+			continue
+		}
+
+		if !memberOfOrg[team.OrgID] {
+			memberOf = append(memberOf, h.getOrgDN(org.Name))
+			memberOfOrg[team.OrgID] = true
+		}
+		memberOf = append(memberOf, h.getTeamDN(org.Name, team.Name))
+	}
+	return
+}
+
 func (h *handler) listUsers() (entries []*ldap.Entry, err error) {
 	users, _, err := h.models.SearchUsers(&models.SearchUserOptions{})
 	if err != nil {
@@ -167,6 +185,7 @@ func (h *handler) listUsers() (entries []*ldap.Entry, err error) {
 		if err != nil {
 			return nil, err
 		}
+
 		dn := h.getUserDN(user.Name)
 		attrs := []*ldap.EntryAttribute{}
 		attrs = append(attrs, &ldap.EntryAttribute{Name: h.userUAttr, Values: []string{user.Name}})
@@ -174,25 +193,14 @@ func (h *handler) listUsers() (entries []*ldap.Entry, err error) {
 		if !user.KeepEmailPrivate {
 			attrs = append(attrs, &ldap.EntryAttribute{Name: "mail", Values: []string{user.Email}})
 		}
-		var memberOf []string
-		memberOfOrg := map[int64]bool{}
-		for _, team := range teams {
-			org, ok := orgByID[team.OrgID]
-			if !ok {
-				continue
-			}
-			if !memberOfOrg[team.OrgID] {
-				memberOf = append(memberOf, h.getOrgDN(org.Name))
-				memberOfOrg[team.OrgID] = true
-			}
-			memberOf = append(memberOf, h.getTeamDN(org.Name, team.Name))
-		}
-		if len(memberOf) > 0 {
+		attrs = append(attrs, &ldap.EntryAttribute{Name: "loginDisabled", Values: []string{strconv.FormatBool(!user.IsActive)}})
+		if memberOf := h.getMemberOf(orgByID, teams); len(memberOf) > 0 {
 			attrs = append(attrs, &ldap.EntryAttribute{Name: "memberOf", Values: memberOf})
 		}
 		attrs = append(attrs, &ldap.EntryAttribute{Name: "objectClass", Values: []string{"inetorgperson"}})
 		attrs = append(attrs, h.userParentRDN.Attributes()...)
 		attrs = append(attrs, h.baseDN.Attributes()...)
+
 		entries = append(entries, &ldap.Entry{DN: dn, Attributes: attrs})
 	}
 	return
@@ -224,7 +232,6 @@ func (h *handler) listUsersCached() (entries []*ldap.Entry, err error) {
 // Search return all gitea users and depends on server to filter it
 // only handle 'inetorgperson'
 func (h *handler) Search(boundDN string, searchReq ldap.SearchRequest, conn net.Conn) (res ldap.ServerSearchResult, err error) {
-
 	if err := h.checkSearchPermission(boundDN, searchReq); err != nil {
 		return ldap.ServerSearchResult{ResultCode: ldap.LDAPResultInsufficientAccessRights}, err
 	}
@@ -234,7 +241,7 @@ func (h *handler) Search(boundDN string, searchReq ldap.SearchRequest, conn net.
 		return ldap.ServerSearchResult{ResultCode: ldap.LDAPResultOperationsError},
 			fmt.Errorf("Search Error: error parsing filter: %s", searchReq.Filter)
 	}
-	switch strings.ToLower(class) {
+	switch class {
 	case "":
 	case "inetorgperson":
 	default:

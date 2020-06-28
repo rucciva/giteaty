@@ -21,39 +21,39 @@ func TestBindInvalidDN(t *testing.T) {
 		dn       string
 	}{
 		{
-			scenario: "invalid BaseDN",
+			scenario: "InvalidBaseDN",
 			dn:       fmt.Sprintf("%s=%s,%s", h.userUAttr, "some-username", "dc=rucciva,dc=com"),
 		},
 		{
-			scenario: "invalid sub-BaseDN",
+			scenario: "InvalidSubBaseDN",
 			dn:       fmt.Sprintf("%s=%s,%s", h.userUAttr, "some-username", "dc=someone,dc=one"),
 		},
 		{
-			scenario: "invalid user parent RDN",
+			scenario: "InvalidUserParentRDN",
 			dn:       fmt.Sprintf("%s=%s,%s", h.userUAttr, "some-username", h.baseDN),
 		},
 		{
-			scenario: "invalid user unique attribute",
+			scenario: "InvalidUserUniqueAttribute",
 			dn:       fmt.Sprintf("id=%s,%s,%s", "some-username", h.userParentRDN, h.baseDN),
 		},
 		{
-			scenario: "Root DN Only",
+			scenario: "RootDNOnly",
 			dn:       h.baseDN.String(),
 		},
 		{
-			scenario: "Root DN Only but Invalid",
+			scenario: "RootDNOnlyButInvalid",
 			dn:       "dc=rucciva,dc=com",
 		},
 		{
-			scenario: "Root DN Only but Sub Invalid",
+			scenario: "RootDNOnlyButSubInvalid",
 			dn:       "dc=someone,dc=one",
 		},
 		{
-			scenario: "No user ID",
+			scenario: "NoUserID",
 			dn:       fmt.Sprintf("%s,%s", h.userParentRDN, h.baseDN),
 		},
 		{
-			scenario: "Not direct child of userParentRDN",
+			scenario: "NotDirectChildOfUserParentRDN",
 			dn:       fmt.Sprintf("%s=%s,org=test,%s,%s", h.userUAttr, "some-username", h.userParentRDN, h.baseDN),
 		},
 	}
@@ -81,14 +81,14 @@ func TestBind(t *testing.T) {
 		err  error
 	}{
 		{
-			scenario: "successful login",
+			scenario: "SuccessfulLogin",
 			username: "rucciva",
 			password: "password",
 			user:     &models.User{Name: "placeholder"},
 			err:      nil,
 		},
 		{
-			scenario: "invalid credenntial",
+			scenario: "InvalidCredenntial",
 			username: "rucciva",
 			password: "invalid",
 			user:     nil,

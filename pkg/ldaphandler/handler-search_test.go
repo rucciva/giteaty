@@ -46,7 +46,7 @@ func TestSearch(t *testing.T) {
 		entry *ldap.Entry
 	}{
 		{
-			user: &models.User{ID: 0, Name: "user", Email: "user@domain.com", FullName: "user me"},
+			user: &models.User{ID: 0, Name: "user", Email: "user@domain.com", FullName: "user me", IsActive: true},
 			orgs: []*models.User{
 				{ID: 2, Name: "org"},
 				{ID: 3, Name: "org1"},
@@ -64,6 +64,7 @@ func TestSearch(t *testing.T) {
 					{Name: "uid", Values: []string{"user"}},
 					{Name: "displayName", Values: []string{"user me"}},
 					{Name: "mail", Values: []string{"user@domain.com"}},
+					{Name: "loginDisabled", Values: []string{"false"}},
 					{Name: "memberOf", Values: []string{
 						h.getOrgDN("org"),
 						h.getTeamDN("org", "team"),
@@ -79,7 +80,7 @@ func TestSearch(t *testing.T) {
 			},
 		},
 		{
-			user: &models.User{ID: 1, Name: "user1", Email: "user1@domain.com", FullName: "user1 me"},
+			user: &models.User{ID: 1, Name: "user1", Email: "user1@domain.com", FullName: "user1 me", IsActive: true},
 			orgs: []*models.User{
 				{ID: 4, Name: "org2"},
 				{ID: 5, Name: "org3"},
@@ -101,6 +102,7 @@ func TestSearch(t *testing.T) {
 					{Name: "uid", Values: []string{"user1"}},
 					{Name: "displayName", Values: []string{"user1 me"}},
 					{Name: "mail", Values: []string{"user1@domain.com"}},
+					{Name: "loginDisabled", Values: []string{"false"}},
 					{Name: "memberOf", Values: []string{
 						h.getOrgDN("org"),
 						h.getTeamDN("org", "team"),
@@ -122,7 +124,7 @@ func TestSearch(t *testing.T) {
 			},
 		},
 		{
-			user: &models.User{ID: 6, Name: "user2", Email: "user2@domain.com", FullName: "user2 me"},
+			user: &models.User{ID: 6, Name: "user2", Email: "user2@domain.com", FullName: "user2 me", IsActive: true},
 
 			entry: &ldap.Entry{
 				DN: h.getUserDN("user2"),
@@ -130,6 +132,7 @@ func TestSearch(t *testing.T) {
 					{Name: "uid", Values: []string{"user2"}},
 					{Name: "displayName", Values: []string{"user2 me"}},
 					{Name: "mail", Values: []string{"user2@domain.com"}},
+					{Name: "loginDisabled", Values: []string{"false"}},
 					{Name: "objectClass", Values: []string{"inetorgperson"}},
 					{Name: "ou", Values: []string{"users"}},
 					{Name: "dc", Values: []string{"domain", "com"}},
@@ -137,13 +140,29 @@ func TestSearch(t *testing.T) {
 			},
 		},
 		{
-			user: &models.User{ID: 7, Name: "user3", Email: "user3@domain.com", FullName: "user3 me", KeepEmailPrivate: true},
+			user: &models.User{ID: 7, Name: "user3", Email: "user3@domain.com", FullName: "user3 me", KeepEmailPrivate: true, IsActive: true},
 
 			entry: &ldap.Entry{
 				DN: h.getUserDN("user3"),
 				Attributes: []*ldap.EntryAttribute{
 					{Name: "uid", Values: []string{"user3"}},
 					{Name: "displayName", Values: []string{"user3 me"}},
+					{Name: "loginDisabled", Values: []string{"false"}},
+					{Name: "objectClass", Values: []string{"inetorgperson"}},
+					{Name: "ou", Values: []string{"users"}},
+					{Name: "dc", Values: []string{"domain", "com"}},
+				},
+			},
+		},
+		{
+			user: &models.User{ID: 8, Name: "user4", Email: "user4@domain.com", FullName: "user4 me", KeepEmailPrivate: true},
+
+			entry: &ldap.Entry{
+				DN: h.getUserDN("user4"),
+				Attributes: []*ldap.EntryAttribute{
+					{Name: "uid", Values: []string{"user4"}},
+					{Name: "displayName", Values: []string{"user4 me"}},
+					{Name: "loginDisabled", Values: []string{"true"}},
 					{Name: "objectClass", Values: []string{"inetorgperson"}},
 					{Name: "ou", Values: []string{"users"}},
 					{Name: "dc", Values: []string{"domain", "com"}},
@@ -203,35 +222,35 @@ func TestSearchInvalid(t *testing.T) {
 		result ldap.LDAPResultCode
 	}{
 		{
-			scenario: "anonymous bindDN",
+			scenario: "AnonymousBindDN",
 			bindDN:   "",
 			baseDN:   h.baseDN.String(),
 			filter:   "(&(objectClass=InetOrgPerson)(uid=*))",
 			result:   ldap.LDAPResultInsufficientAccessRights,
 		},
 		{
-			scenario: "unprivileged bindDN",
+			scenario: "UnprivilegedBindDN",
 			bindDN:   "uid=someuser,ou=users,dc=domain,dc=com",
 			baseDN:   h.baseDN.String(),
 			filter:   "(&(objectClass=InetOrgPerson)(uid=*))",
 			result:   ldap.LDAPResultInsufficientAccessRights,
 		},
 		{
-			scenario: "unknown baseDN",
+			scenario: "UnknownBaseDN",
 			bindDN:   "uid=admin,ou=users,dc=domain,dc=com",
 			baseDN:   "dc=domain,dc=net",
 			filter:   "(&(objectClass=InetOrgPerson)(uid=*))",
 			result:   ldap.LDAPResultInsufficientAccessRights,
 		},
 		{
-			scenario: "unknown sub baseDN",
+			scenario: "UnknownSubBaseDN",
 			bindDN:   "uid=admin,ou=users,dc=domain,dc=com",
 			baseDN:   "dc=domain1,dc=com",
 			filter:   "(&(objectClass=InetOrgPerson)(uid=*))",
 			result:   ldap.LDAPResultInsufficientAccessRights,
 		},
 		{
-			scenario: "unknown object class",
+			scenario: "UnknownObjectClass",
 			bindDN:   "uid=admin,ou=users,dc=domain,dc=com",
 			baseDN:   "dc=domain,dc=com",
 			filter:   "(&(objectClass=person)(uid=*))",

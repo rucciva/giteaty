@@ -58,9 +58,10 @@ services:
     volumes:
       - ${PWD}/../../:${PWD}/../../
       - go:/go
-    command: go test ./...
+    command: make test
 
   giteaty:
+    image: rucciva/giteaty:0.0.1
     restart: unless-stopped
     environment:
       - DB_TYPE=mysql
@@ -74,12 +75,6 @@ services:
         condition: service_healthy 
       gitea: 
         condition: service_started
-    
-  nexus:
-    image: docker.rucciva.one/rucciva/nexus3:3.24.0
-    restart: unless-stopped
-    depends_on: 
-      - giteaty
 
   proxy:
     image: serjs/go-socks5-proxy

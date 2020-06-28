@@ -1,0 +1,6 @@
+version: "2.4"
+services:
+  giteaty:
+    build:
+      context: ../../
+      dockerfile: build/docker/Dockerfile

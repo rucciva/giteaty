@@ -25,9 +25,7 @@ services:
       - DB_NAME=gitea
       - DB_USER=gitea
       - DB_PASSWD=gitea
-      - HTTP_PORT=13000
-    ports:
-      - "13000:13000"
+      - HTTP_PORT=3000
   
   builder:
     image: rucciva/golang:1.14.2-alpine
@@ -38,12 +36,11 @@ services:
       - DB_NAME=gitea
       - DB_USER=gitea
       - DB_PASSWD=gitea
-    depends_on:
-      - mysql
     working_dir: ${PWD}/../../
     volumes:
       - ${PWD}/../../:${PWD}/../../
       - go:/go
+    command: go get ./...
 
   tester:
     image: rucciva/golang:1.14.2-alpine
@@ -61,4 +58,30 @@ services:
     volumes:
       - ${PWD}/../../:${PWD}/../../
       - go:/go
-    command: go test ./...
+    command: make test
+
+  giteaty:
+    image: rucciva/giteaty:0.0.1
+    restart: unless-stopped
+    environment:
+      - DB_TYPE=mysql
+      - DB_HOST=mysql:3306
+      - DB_NAME=gitea
+      - DB_USER=gitea
+      - DB_PASSWD=gitea
+      - LDAP_SEARCHERS=rucciva
+    depends_on:
+      mysql:
+        condition: service_healthy 
+      gitea: 
+        condition: service_started
+
+  proxy:
+    image: serjs/go-socks5-proxy
+    restart: unless-stopped
+    environment:
+      - PROXY_PORT=1080
+    ports:
+      - 1080:1080
+
+

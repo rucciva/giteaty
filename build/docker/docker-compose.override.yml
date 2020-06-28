@@ -1,0 +1,11 @@
+version: "2.4"
+services:
+  giteaty:
+    image: rucciva/golang:1.14.2-alpine
+    environment:
+      - GOCACHE=/go/build
+    working_dir: ${PWD}/../../
+    volumes:
+      - ${PWD}/../../:${PWD}/../../
+      - go:/go
+    command: go run github.com/rucciva/giteaty/cmd/giteaty

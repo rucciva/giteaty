@@ -7,10 +7,21 @@ Expose gitea users' authentication data through:
 
 ## Development
 
-### Test
+### Build and Test
 
 ```bash
-cd docker/build
-docker-compose up tester
-cd ./...
+make generate
+make build
+make test
+```
+
+### Build Docker Image
+
+```bash
+cd build/docker
+docker-compose \
+    -f docker-compose.yml \
+    -f docker-compose.production.yml \
+    build giteaty
+cd ../../
 ```

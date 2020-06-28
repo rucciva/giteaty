@@ -45,22 +45,22 @@ func TestGetGroupDN(t *testing.T) {
 	data := []struct {
 		baseDN         string
 		groupParentRDN string
-		groupOrgUAttr  string
-		groupTeamUAttr string
+		groupUAttr     string
 		group          string
 		team           string
 
-		dn string
+		orgDN  string
+		teamDN string
 	}{
 		{
 
-			groupTeamUAttr: "cn",
-			team:           "team",
-			groupOrgUAttr:  "cn",
+			groupUAttr:     "cn",
 			group:          "group",
+			team:           "team",
 			groupParentRDN: "ou=groups",
 			baseDN:         "dc=domain,dc=com",
-			dn:             "cn=team,cn=group,ou=groups,dc=domain,dc=com",
+			teamDN:         "cn=group[team],ou=groups,dc=domain,dc=com",
+			orgDN:          "cn=group,ou=groups,dc=domain,dc=com",
 		},
 	}
 
@@ -68,9 +68,9 @@ func TestGetGroupDN(t *testing.T) {
 		h := handler{
 			baseDN:         newNames(d.baseDN),
 			groupParentRDN: newNames(d.groupParentRDN),
-			groupOrgUAttr:  d.groupOrgUAttr,
-			groupTeamUAttr: d.groupTeamUAttr,
+			groupUAttr:     d.groupUAttr,
 		}
-		assert.Equal(t, d.dn, h.getGroupDN(d.group, d.team))
+		assert.Equal(t, d.teamDN, h.getTeamDN(d.group, d.team))
+		assert.Equal(t, d.orgDN, h.getOrgDN(d.group))
 	}
 }

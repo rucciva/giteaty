@@ -46,7 +46,7 @@ func TestSearch(t *testing.T) {
 		entry *ldap.Entry
 	}{
 		{
-			user: &models.User{ID: 0, Name: "user", Email: "user@domain.com", FullName: "user me"},
+			user: &models.User{ID: 0, Name: "user", Email: "user@domain.com", FullName: "user me", IsActive: true},
 			orgs: []*models.User{
 				{ID: 2, Name: "org"},
 				{ID: 3, Name: "org1"},
@@ -64,11 +64,14 @@ func TestSearch(t *testing.T) {
 					{Name: "uid", Values: []string{"user"}},
 					{Name: "displayName", Values: []string{"user me"}},
 					{Name: "mail", Values: []string{"user@domain.com"}},
+					{Name: "loginDisabled", Values: []string{"false"}},
 					{Name: "memberOf", Values: []string{
-						h.getGroupDN("org", "team"),
-						h.getGroupDN("org", "team1"),
-						h.getGroupDN("org1", "team2"),
-						h.getGroupDN("org1", "team3"),
+						h.getOrgDN("org"),
+						h.getTeamDN("org", "team"),
+						h.getTeamDN("org", "team1"),
+						h.getOrgDN("org1"),
+						h.getTeamDN("org1", "team2"),
+						h.getTeamDN("org1", "team3"),
 					}},
 					{Name: "objectClass", Values: []string{"inetorgperson"}},
 					{Name: "ou", Values: []string{"users"}},
@@ -77,12 +80,16 @@ func TestSearch(t *testing.T) {
 			},
 		},
 		{
-			user: &models.User{ID: 1, Name: "user1", Email: "user1@domain.com", FullName: "user1 me"},
+			user: &models.User{ID: 1, Name: "user1", Email: "user1@domain.com", FullName: "user1 me", IsActive: true},
 			orgs: []*models.User{
 				{ID: 4, Name: "org2"},
 				{ID: 5, Name: "org3"},
 			},
 			teams: []*models.Team{
+				{ID: 0, OrgID: 2, Name: "team"},
+				{ID: 1, OrgID: 2, Name: "team1"},
+				{ID: 2, OrgID: 3, Name: "team2"},
+				{ID: 3, OrgID: 3, Name: "team3"},
 				{ID: 4, OrgID: 4, Name: "team4"},
 				{ID: 5, OrgID: 4, Name: "team5"},
 				{ID: 6, OrgID: 5, Name: "team6"},
@@ -95,11 +102,20 @@ func TestSearch(t *testing.T) {
 					{Name: "uid", Values: []string{"user1"}},
 					{Name: "displayName", Values: []string{"user1 me"}},
 					{Name: "mail", Values: []string{"user1@domain.com"}},
+					{Name: "loginDisabled", Values: []string{"false"}},
 					{Name: "memberOf", Values: []string{
-						h.getGroupDN("org2", "team4"),
-						h.getGroupDN("org2", "team5"),
-						h.getGroupDN("org3", "team6"),
-						h.getGroupDN("org3", "team7"),
+						h.getOrgDN("org"),
+						h.getTeamDN("org", "team"),
+						h.getTeamDN("org", "team1"),
+						h.getOrgDN("org1"),
+						h.getTeamDN("org1", "team2"),
+						h.getTeamDN("org1", "team3"),
+						h.getOrgDN("org2"),
+						h.getTeamDN("org2", "team4"),
+						h.getTeamDN("org2", "team5"),
+						h.getOrgDN("org3"),
+						h.getTeamDN("org3", "team6"),
+						h.getTeamDN("org3", "team7"),
 					}},
 					{Name: "objectClass", Values: []string{"inetorgperson"}},
 					{Name: "ou", Values: []string{"users"}},
@@ -108,7 +124,7 @@ func TestSearch(t *testing.T) {
 			},
 		},
 		{
-			user: &models.User{ID: 6, Name: "user2", Email: "user2@domain.com", FullName: "user2 me"},
+			user: &models.User{ID: 6, Name: "user2", Email: "user2@domain.com", FullName: "user2 me", IsActive: true},
 
 			entry: &ldap.Entry{
 				DN: h.getUserDN("user2"),
@@ -116,6 +132,7 @@ func TestSearch(t *testing.T) {
 					{Name: "uid", Values: []string{"user2"}},
 					{Name: "displayName", Values: []string{"user2 me"}},
 					{Name: "mail", Values: []string{"user2@domain.com"}},
+					{Name: "loginDisabled", Values: []string{"false"}},
 					{Name: "objectClass", Values: []string{"inetorgperson"}},
 					{Name: "ou", Values: []string{"users"}},
 					{Name: "dc", Values: []string{"domain", "com"}},
@@ -123,13 +140,29 @@ func TestSearch(t *testing.T) {
 			},
 		},
 		{
-			user: &models.User{ID: 7, Name: "user3", Email: "user3@domain.com", FullName: "user3 me", KeepEmailPrivate: true},
+			user: &models.User{ID: 7, Name: "user3", Email: "user3@domain.com", FullName: "user3 me", KeepEmailPrivate: true, IsActive: true},
 
 			entry: &ldap.Entry{
 				DN: h.getUserDN("user3"),
 				Attributes: []*ldap.EntryAttribute{
 					{Name: "uid", Values: []string{"user3"}},
 					{Name: "displayName", Values: []string{"user3 me"}},
+					{Name: "loginDisabled", Values: []string{"false"}},
+					{Name: "objectClass", Values: []string{"inetorgperson"}},
+					{Name: "ou", Values: []string{"users"}},
+					{Name: "dc", Values: []string{"domain", "com"}},
+				},
+			},
+		},
+		{
+			user: &models.User{ID: 8, Name: "user4", Email: "user4@domain.com", FullName: "user4 me", KeepEmailPrivate: true},
+
+			entry: &ldap.Entry{
+				DN: h.getUserDN("user4"),
+				Attributes: []*ldap.EntryAttribute{
+					{Name: "uid", Values: []string{"user4"}},
+					{Name: "displayName", Values: []string{"user4 me"}},
+					{Name: "loginDisabled", Values: []string{"true"}},
 					{Name: "objectClass", Values: []string{"inetorgperson"}},
 					{Name: "ou", Values: []string{"users"}},
 					{Name: "dc", Values: []string{"domain", "com"}},
@@ -137,9 +170,9 @@ func TestSearch(t *testing.T) {
 			},
 		},
 	}
-	users, entries := []*models.User{}, []*ldap.Entry{}
+	users, groups, entries := []*models.User{}, []*models.User{}, []*ldap.Entry{}
 	for _, dat := range data {
-		users, entries = append(users, dat.user), append(entries, dat.entry)
+		users, groups, entries = append(users, dat.user), append(groups, dat.orgs...), append(entries, dat.entry)
 	}
 	cacheMissCount := 2
 
@@ -150,10 +183,10 @@ func TestSearch(t *testing.T) {
 	mdl.EXPECT().
 		SearchUsers(reflectEq{&models.SearchUserOptions{}}).
 		Return(users, int64(len(users)), nil).Times(cacheMissCount)
+	mdl.EXPECT().
+		SearchUsers(reflectEq{&models.SearchUserOptions{Type: models.UserTypeOrganization}}).
+		Return(groups, int64(len(groups)), nil).Times(cacheMissCount)
 	for _, dat := range data {
-		mdl.EXPECT().
-			GetOrgsByUserID(gomock.Eq(dat.user.ID), gomock.Eq(true)).
-			Return(dat.orgs, nil).Times(cacheMissCount)
 		mdl.EXPECT().
 			GetUserTeams(gomock.Eq(dat.user.ID), reflectEq{models.ListOptions{}}).
 			Return(dat.teams, nil).Times(cacheMissCount)
@@ -167,7 +200,7 @@ func TestSearch(t *testing.T) {
 			res, err := h.Search(h.getUserDN("admin"), req, nil)
 			require.NoError(t, err, "should not return error")
 			assert.Equal(t, ldap.LDAPResultCode(ldap.LDAPResultSuccess), res.ResultCode)
-			assert.ElementsMatchf(t, entries, res.Entries, "\n%s\nshould match\n%s", toJSONString(res), toJSONString(entries))
+			assert.ElementsMatchf(t, entries, res.Entries, "\n%s\nshould match\n%s", toJSONString(res.Entries), toJSONString(entries))
 		}
 		if i < cacheMissCount-1 {
 			<-time.After(time.Duration(h.cacheExpire) * time.Second) // wait cache expire
@@ -189,35 +222,35 @@ func TestSearchInvalid(t *testing.T) {
 		result ldap.LDAPResultCode
 	}{
 		{
-			scenario: "anonymous bindDN",
+			scenario: "AnonymousBindDN",
 			bindDN:   "",
 			baseDN:   h.baseDN.String(),
 			filter:   "(&(objectClass=InetOrgPerson)(uid=*))",
 			result:   ldap.LDAPResultInsufficientAccessRights,
 		},
 		{
-			scenario: "unprivileged bindDN",
+			scenario: "UnprivilegedBindDN",
 			bindDN:   "uid=someuser,ou=users,dc=domain,dc=com",
 			baseDN:   h.baseDN.String(),
 			filter:   "(&(objectClass=InetOrgPerson)(uid=*))",
 			result:   ldap.LDAPResultInsufficientAccessRights,
 		},
 		{
-			scenario: "unknown baseDN",
+			scenario: "UnknownBaseDN",
 			bindDN:   "uid=admin,ou=users,dc=domain,dc=com",
 			baseDN:   "dc=domain,dc=net",
 			filter:   "(&(objectClass=InetOrgPerson)(uid=*))",
 			result:   ldap.LDAPResultInsufficientAccessRights,
 		},
 		{
-			scenario: "unknown sub baseDN",
+			scenario: "UnknownSubBaseDN",
 			bindDN:   "uid=admin,ou=users,dc=domain,dc=com",
 			baseDN:   "dc=domain1,dc=com",
 			filter:   "(&(objectClass=InetOrgPerson)(uid=*))",
 			result:   ldap.LDAPResultInsufficientAccessRights,
 		},
 		{
-			scenario: "unknown object class",
+			scenario: "UnknownObjectClass",
 			bindDN:   "uid=admin,ou=users,dc=domain,dc=com",
 			baseDN:   "dc=domain,dc=com",
 			filter:   "(&(objectClass=person)(uid=*))",

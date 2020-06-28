@@ -33,21 +33,6 @@ func (m *MockModels) EXPECT() *MockModelsMockRecorder {
 	return m.recorder
 }
 
-// GetOrgsByUserID mocks base method
-func (m *MockModels) GetOrgsByUserID(arg0 int64, arg1 bool) ([]*models.User, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "GetOrgsByUserID", arg0, arg1)
-	ret0, _ := ret[0].([]*models.User)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// GetOrgsByUserID indicates an expected call of GetOrgsByUserID
-func (mr *MockModelsMockRecorder) GetOrgsByUserID(arg0, arg1 interface{}) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetOrgsByUserID", reflect.TypeOf((*MockModels)(nil).GetOrgsByUserID), arg0, arg1)
-}
-
 // GetUserTeams mocks base method
 func (m *MockModels) GetUserTeams(arg0 int64, arg1 models.ListOptions) ([]*models.Team, error) {
 	m.ctrl.T.Helper()

@@ -17,104 +17,126 @@ var (
 	_ gitea.Models = gModels{}
 )
 
-type modelsOption func(*gModels)
+type modelsOption func(*gModels) error
+
+func ModelsOptions() []modelsOption {
+	return make([]modelsOption, 0, 18)
+}
 
 func ModelsWithDBType(v string) modelsOption {
-	return func(g *gModels) {
-		g.cfg["DB_TYPE"] = v
+	return func(g *gModels) (err error) {
+		g.cfg.Key("DB_TYPE").SetValue(v)
+		return
 	}
 }
 
 func ModelsWithDBHost(host string) modelsOption {
-	return func(g *gModels) {
-		g.cfg["HOST"] = host
+	return func(g *gModels) (err error) {
+		g.cfg.Key("HOST").SetValue(host)
+		return
 	}
 }
 func ModelsWithDBName(v string) modelsOption {
-	return func(g *gModels) {
-		g.cfg["NAME"] = v
+	return func(g *gModels) (err error) {
+		g.cfg.Key("NAME").SetValue(v)
+		return
 	}
 }
 func ModelsWithDBUser(v string) modelsOption {
-	return func(g *gModels) {
-		g.cfg["USER"] = v
+	return func(g *gModels) (err error) {
+		g.cfg.Key("USER").SetValue(v)
+		return
 	}
 }
 func ModelsWithDBPasswd(v string) modelsOption {
-	return func(g *gModels) {
-		g.cfg["PASSWD"] = v
+	return func(g *gModels) (err error) {
+		g.cfg.Key("PASSWD").SetValue(v)
+		return
 	}
 }
 func ModelsWithDBSchema(v string) modelsOption {
-	return func(g *gModels) {
-		g.cfg["SCHEMA"] = v
+	return func(g *gModels) (err error) {
+		g.cfg.Key("SCHEMA").SetValue(v)
+		return
 	}
 }
 func ModelsWithDBSSLMode(v string) modelsOption {
-	return func(g *gModels) {
-		g.cfg["SSL_MODE"] = v
+	return func(g *gModels) (err error) {
+		g.cfg.Key("SSL_MODE").SetValue(v)
+		return
 	}
 }
 func ModelsWithDBCharset(v string) modelsOption {
-	return func(g *gModels) {
-		g.cfg["CHARSET"] = v
+	return func(g *gModels) (err error) {
+		g.cfg.Key("CHARSET").SetValue(v)
+		return
 	}
 }
 func ModelsWithDBPath(v string) modelsOption {
-	return func(g *gModels) {
-		g.cfg["PATH"] = v
+	return func(g *gModels) (err error) {
+		g.cfg.Key("PATH").SetValue(v)
+		return
 	}
 }
 func ModelsWithDBSqliteTimeoutSecond(v int) modelsOption {
-	return func(g *gModels) {
-		g.cfg["SQLITE_TIMEOUT"] = strconv.FormatInt(int64(v), 10)
+	return func(g *gModels) (err error) {
+		g.cfg.Key("SQLITE_TIMEOUT").SetValue(strconv.FormatInt(int64(v), 10))
+		return
 	}
 }
 func ModelsWithDBMaxIdleConns(v int) modelsOption {
-	return func(g *gModels) {
-		g.cfg["MAX_IDLE_CONNS"] = strconv.FormatInt(int64(v), 10)
+	return func(g *gModels) (err error) {
+		g.cfg.Key("MAX_IDLE_CONNS").SetValue(strconv.FormatInt(int64(v), 10))
+		return
 	}
 }
-func ModelsWithDBMaxConnLifeTime(v time.Duration) modelsOption {
-	return func(g *gModels) {
-		g.cfg["CONN_MAX_LIFE_TIME"] = strconv.FormatInt(int64(v), 10)
+func ModelsWithDBConnMaxLifeTime(v time.Duration) modelsOption {
+	return func(g *gModels) (err error) {
+		g.cfg.Key("CONN_MAX_LIFE_TIME").SetValue(strconv.FormatInt(int64(v), 10))
+		return
 	}
 }
 func ModelsWithDBMaxOpenConns(v int) modelsOption {
-	return func(g *gModels) {
-		g.cfg["MAX_OPEN_CONNS"] = strconv.FormatInt(int64(v), 10)
+	return func(g *gModels) (err error) {
+		g.cfg.Key("MAX_OPEN_CONNS").SetValue(strconv.FormatInt(int64(v), 10))
+		return
 	}
 }
-func ModelsWithDBIterateBuffSize(v int) modelsOption {
-	return func(g *gModels) {
-		g.cfg["ITERATE_BUFFER_SIZE"] = strconv.FormatInt(int64(v), 10)
+func ModelsWithDBIterateBufferSize(v int) modelsOption {
+	return func(g *gModels) (err error) {
+		g.cfg.Key("ITERATE_BUFFER_SIZE").SetValue(strconv.FormatInt(int64(v), 10))
+		return
 	}
 }
 func ModelsWithDBLogSql(v bool) modelsOption {
-	return func(g *gModels) {
-		g.cfg["LOG_SQL"] = strconv.FormatBool(v)
+	return func(g *gModels) (err error) {
+		g.cfg.Key("LOG_SQL").SetValue(strconv.FormatBool(v))
+		return
 	}
 }
-func ModelsWithDBRetries(v int) modelsOption {
-	return func(g *gModels) {
-		g.cfg["DB_RETRIES"] = strconv.FormatInt(int64(v), 10)
+func ModelsWithDBConnectRetries(v int) modelsOption {
+	return func(g *gModels) (err error) {
+		g.cfg.Key("DB_RETRIES").SetValue(strconv.FormatInt(int64(v), 10))
+		return
 	}
 }
-func ModelsWithDBRetryBackoff(v time.Duration) modelsOption {
-	return func(g *gModels) {
-		g.cfg["DB_RETRY_BACKOFF"] = strconv.FormatInt(int64(v), 10)
+func ModelsWithDBConnectBackoff(v time.Duration) modelsOption {
+	return func(g *gModels) (err error) {
+		g.cfg.Key("DB_RETRY_BACKOFF").SetValue(strconv.FormatInt(int64(v), 10))
+		return
 	}
 }
 func ModelsWithDBMigration() modelsOption {
-	return func(g *gModels) {
+	return func(g *gModels) (err error) {
 		g.engineCreator = func() error {
 			return models.NewEngine(context.Background(), migrations.Migrate)
 		}
+		return
 	}
 }
 
 type gModels struct {
-	cfg map[string]string
+	cfg *ini.Section
 
 	engineCreator func() error
 }
@@ -126,17 +148,15 @@ func InitModels(opts ...modelsOption) (err error) {
 		return fmt.Errorf("already initialized")
 	}
 
+	setting.Cfg = ini.Empty()
 	gmodels = &gModels{
-		cfg:           make(map[string]string),
-		engineCreator: func() error { return models.SetEngine() },
+		cfg:           setting.Cfg.Section("database"),
+		engineCreator: models.SetEngine,
 	}
 	for _, opt := range opts {
-		opt(gmodels)
-	}
-
-	setting.Cfg = ini.Empty()
-	for k, v := range gmodels.cfg {
-		setting.Cfg.Section("database").Key(k).SetValue(v)
+		if err = opt(gmodels); err != nil {
+			return
+		}
 	}
 	setting.InitDBConfig()
 	if err := gmodels.engineCreator(); err != nil {
@@ -153,13 +173,10 @@ func (gModels) UserSignIn(username, password string) (*models.User, error) {
 	return models.UserSignIn(username, password)
 }
 
-func (gModels) GetOrgsByUserID(userID int64, showAll bool) ([]*models.User, error) {
-	return models.GetOrgsByUserID(userID, showAll)
-}
 func (gModels) GetUserTeams(userID int64, listOptions models.ListOptions) ([]*models.Team, error) {
-
 	return models.GetUserTeams(userID, listOptions)
 }
+
 func (gModels) SearchUsers(opts *models.SearchUserOptions) (users []*models.User, count int64, err error) {
 	return models.SearchUsers(opts)
 }

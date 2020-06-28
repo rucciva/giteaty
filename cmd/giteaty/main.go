@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
-	"log"
 	"os"
 	"os/signal"
 	"syscall"
+
+	"git.rucciva.one/rucciva/log"
+	"git.rucciva.one/rucciva/log/impl/rzap"
 
 	"github.com/rucciva/giteaty/pkg/command"
 )
@@ -19,9 +21,11 @@ func main() {
 		cancel()
 	}()
 
+	log.RegisterP(rzap.NewPLogger())
+
 	err := command.Run(ctx, os.Args)
 	if err != nil {
-		log.Println(err)
+		log.GetPGlobal().Error("run_failed").WithFields("error", err)
 		os.Exit(1)
 	}
 }

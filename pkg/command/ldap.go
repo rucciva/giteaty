@@ -1,9 +1,9 @@
 package command
 
 import (
+	"git.rucciva.one/rucciva/log"
 	ldaps "github.com/nmcclain/ldap"
 	"github.com/rucciva/giteaty/pkg/gitea"
-	"github.com/rucciva/giteaty/pkg/gitea/globals"
 	"github.com/rucciva/giteaty/pkg/ldaphandler"
 	"github.com/urfave/cli/v2"
 )
@@ -47,23 +47,25 @@ func ldapFlag() []cli.Flag {
 	}
 }
 
-func (cmd command) NewLDAPHandler(c *cli.Context, m gitea.Models) (ldaphandler.Interface, error) {
+func newLDAPHandler(c *cli.Context, m gitea.Models) (ldaphandler.Interface, error) {
 	return ldaphandler.New(
 		ldaphandler.WithBaseDN(c.String(flagLDAPBaseDn)),
 		ldaphandler.WithSearchers(c.StringSlice(flagLDAPSearchers)),
 		ldaphandler.WithCache(c.Int(flagLDAPCacheSize), c.Int(flagLDAPCacheExpireSecond)),
 		ldaphandler.WithModels(m),
+		ldaphandler.WithLogger(log.GetPGlobal()),
 	)
 }
 
-func (cmd command) StartLDAP(c *cli.Context) (err error) {
-	h, err := cmd.NewLDAPHandler(c, globals.Models())
+func startLDAP(c *cli.Context, m gitea.Models) (err error) {
+	h, err := newLDAPHandler(c, m)
 	if err != nil {
 		return
 	}
 
+	done := false
 	quit := make(chan bool)
-	go func() { <-c.Context.Done(); close(quit) }()
+	go func() { <-c.Context.Done(); done = true; close(quit) }()
 
 	s := ldaps.NewServer()
 	s.EnforceLDAP = true
@@ -71,5 +73,9 @@ func (cmd command) StartLDAP(c *cli.Context) (err error) {
 	s.SearchFunc("", h)
 	s.QuitChannel(quit)
 
-	return s.ListenAndServe(c.String(flagLDAPListenAddr))
+	err = s.ListenAndServe(c.String(flagLDAPListenAddr))
+	if err != nil && done {
+		err = nil
+	}
+	return
 }

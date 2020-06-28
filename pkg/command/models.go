@@ -100,7 +100,7 @@ func modelsFlag() []cli.Flag {
 	}
 }
 
-func (cmd command) InitDB(c *cli.Context) (err error) {
+func initDB(c *cli.Context) (err error) {
 	opts := globals.ModelsOptions()
 	if c.IsSet(flagDBType) {
 		opts = append(opts, globals.ModelsWithDBType(c.String(flagDBType)))

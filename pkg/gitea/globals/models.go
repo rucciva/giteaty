@@ -10,6 +10,7 @@ import (
 	"code.gitea.io/gitea/models/migrations"
 	"code.gitea.io/gitea/modules/setting"
 	"github.com/rucciva/giteaty/pkg/gitea"
+	"github.com/unknwon/com"
 	"gopkg.in/ini.v1"
 )
 
@@ -120,12 +121,28 @@ func ModelsWithDBConnectRetries(v int) modelsOption {
 		return
 	}
 }
+
 func ModelsWithDBConnectBackoff(v time.Duration) modelsOption {
 	return func(g *gModels) (err error) {
 		g.cfg.Key("DB_RETRY_BACKOFF").SetValue(strconv.FormatInt(int64(v), 10))
 		return
 	}
 }
+
+func ModelsWithGiteaConf(path string) modelsOption {
+	return func(g *gModels) (err error) {
+		cfg := ini.Empty()
+		if !com.IsFile(path) {
+			return fmt.Errorf("invalid path %s", path)
+		}
+		if err = cfg.Append(path); err != nil {
+			return
+		}
+		g.cfg = cfg.Section("database")
+		return
+	}
+}
+
 func ModelsWithDBMigration() modelsOption {
 	return func(g *gModels) (err error) {
 		g.engineCreator = func() error {
@@ -141,32 +158,32 @@ type gModels struct {
 	engineCreator func() error
 }
 
-var gmodels *gModels
+var gm *gModels
 
 func InitModels(opts ...modelsOption) (err error) {
-	if gmodels != nil {
+	if gm != nil {
 		return fmt.Errorf("already initialized")
 	}
 
 	setting.Cfg = ini.Empty()
-	gmodels = &gModels{
+	gm = &gModels{
 		cfg:           setting.Cfg.Section("database"),
 		engineCreator: models.SetEngine,
 	}
 	for _, opt := range opts {
-		if err = opt(gmodels); err != nil {
+		if err = opt(gm); err != nil {
 			return
 		}
 	}
 	setting.InitDBConfig()
-	if err := gmodels.engineCreator(); err != nil {
+	if err := gm.engineCreator(); err != nil {
 		return fmt.Errorf("set engine failed: %v", err)
 	}
 	return
 }
 
 func Models() gitea.Models {
-	return gmodels
+	return gm
 }
 
 func (gModels) UserSignIn(username, password string) (*models.User, error) {

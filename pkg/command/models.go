@@ -23,6 +23,8 @@ const (
 	flagDBMaxOpenConns        = "db-max-open-conns"
 	flagDBConnMaxLifetime     = "db-conn-max-lifetime"
 	flagDBIterateBufferSize   = "db-iterate-buffer-size"
+
+	flagGiteaConf = "gitea-conf"
 )
 
 func modelsFlag() []cli.Flag {
@@ -97,6 +99,11 @@ func modelsFlag() []cli.Flag {
 			Name:    flagDBIterateBufferSize,
 			EnvVars: []string{"DB_ITERATE_BUFFER_SIZE"},
 		},
+
+		&cli.StringFlag{
+			Name:    flagGiteaConf,
+			EnvVars: []string{"GITEA_CONF"},
+		},
 	}
 }
 
@@ -151,5 +158,10 @@ func initDB(c *cli.Context) (err error) {
 	if c.IsSet(flagDBIterateBufferSize) {
 		opts = append(opts, globals.ModelsWithDBIterateBufferSize(c.Int(flagDBIterateBufferSize)))
 	}
+
+	if c.IsSet(flagGiteaConf) {
+		opts = append(opts, globals.ModelsWithGiteaConf(c.String(flagGiteaConf)))
+	}
+
 	return globals.InitModels(opts...)
 }

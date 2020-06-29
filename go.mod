@@ -11,6 +11,8 @@ require (
 	github.com/nmcclain/asn1-ber v0.0.0-20170104154839-2661553a0484 // indirect
 	github.com/nmcclain/ldap v0.0.0-20191021200707-3b3b69a7e9e3
 	github.com/stretchr/testify v1.6.1
+	github.com/unknwon/com v1.0.1
 	github.com/urfave/cli/v2 v2.2.0
 	gopkg.in/ini.v1 v1.52.0
+	gotest.tools v2.2.0+incompatible
 )

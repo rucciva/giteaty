@@ -76,7 +76,7 @@ services:
     command: make test
 
   giteaty:
-    image: rucciva/giteaty:0.0.1
+    image: rucciva/giteaty:0.0.2
     restart: unless-stopped
     environment:
       - DB_TYPE=mysql

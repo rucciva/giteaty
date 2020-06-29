@@ -1,6 +1,6 @@
 # Gitea Identity
 
-Expose gitea users' authentication data through:
+Expose gitea users' authentication through:
 
 - [x] LDAP
 - [ ] OpenID Connect (with [ORY Hydra](https://github.com/ory/hydra))

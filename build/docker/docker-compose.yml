@@ -27,6 +27,21 @@ services:
       - DB_PASSWD=gitea
       - HTTP_PORT=3000
   
+  generator:
+    image: rucciva/golang:1.14.2-alpine
+    environment:
+      - GOCACHE=/go/build
+      - DB_TYPE=mysql
+      - DB_HOST=mysql:3306
+      - DB_NAME=gitea
+      - DB_USER=gitea
+      - DB_PASSWD=gitea
+    working_dir: ${PWD}/../../
+    volumes:
+      - ${PWD}/../../:${PWD}/../../
+      - go:/go
+    command: make generate
+
   builder:
     image: rucciva/golang:1.14.2-alpine
     environment:
@@ -40,7 +55,7 @@ services:
     volumes:
       - ${PWD}/../../:${PWD}/../../
       - go:/go
-    command: go get ./...
+    command: make build
 
   tester:
     image: rucciva/golang:1.14.2-alpine

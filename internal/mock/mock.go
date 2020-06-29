@@ -4,5 +4,5 @@ package mock
 import "github.com/rucciva/giteaty/pkg/gitea"
 
 var (
-	_ gitea.Models = &MockModels{}
+	_ gitea.Models = (*MockModels)(nil)
 )

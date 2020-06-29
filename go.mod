@@ -14,5 +14,4 @@ require (
 	github.com/unknwon/com v1.0.1
 	github.com/urfave/cli/v2 v2.2.0
 	gopkg.in/ini.v1 v1.52.0
-	gotest.tools v2.2.0+incompatible
 )

@@ -138,7 +138,10 @@ func ModelsWithGiteaConf(path string) modelsOption {
 		if err = cfg.Append(path); err != nil {
 			return
 		}
-		g.cfg = cfg.Section("database")
+		for k, v := range cfg.Section("database").KeysHash() {
+			g.cfg.Key(k).SetValue(v)
+		}
+
 		return
 	}
 }

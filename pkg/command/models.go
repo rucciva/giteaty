@@ -30,9 +30,8 @@ const (
 func modelsFlag() []cli.Flag {
 	return []cli.Flag{
 		&cli.StringFlag{
-			Name:     flagDBType,
-			EnvVars:  []string{"DB_TYPE"},
-			Required: true,
+			Name:    flagDBType,
+			EnvVars: []string{"DB_TYPE"},
 		},
 		&cli.StringFlag{
 			Name:    flagDBHost,
@@ -109,6 +108,10 @@ func modelsFlag() []cli.Flag {
 
 func initDB(c *cli.Context) (err error) {
 	opts := globals.ModelsOptions()
+	if c.IsSet(flagGiteaConf) {
+		opts = append(opts, globals.ModelsWithGiteaConf(c.String(flagGiteaConf)))
+	}
+
 	if c.IsSet(flagDBType) {
 		opts = append(opts, globals.ModelsWithDBType(c.String(flagDBType)))
 	}
@@ -157,10 +160,6 @@ func initDB(c *cli.Context) (err error) {
 	}
 	if c.IsSet(flagDBIterateBufferSize) {
 		opts = append(opts, globals.ModelsWithDBIterateBufferSize(c.Int(flagDBIterateBufferSize)))
-	}
-
-	if c.IsSet(flagGiteaConf) {
-		opts = append(opts, globals.ModelsWithGiteaConf(c.String(flagGiteaConf)))
 	}
 
 	return globals.InitModels(opts...)

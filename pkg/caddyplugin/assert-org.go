@@ -1,0 +1,36 @@
+package caddyplugin
+
+import (
+	"net/http"
+	"strings"
+
+	"code.gitea.io/sdk/gitea"
+	"github.com/go-chi/chi"
+)
+
+func (h *handler) assertOrgTeam(req *http.Request, orgname string) (err error) {
+	gcl := h.newGiteaClient(req)
+	teams, err := gcl.ListMyTeams(&gitea.ListTeamsOptions{})
+	if err != nil {
+		return errUnauthorized
+	}
+	for _, team := range teams {
+		if strings.EqualFold(team.Organization.UserName, orgname) {
+			if _, ok := h.cfg.authzOrgTeams[strings.ToLower(team.Name)]; ok {
+				return
+			}
+		}
+	}
+	return errUnauthorized
+}
+
+func (h *handler) assertOrgTeamMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		err := h.assertOrgTeam(r, chi.URLParam(r, "org"))
+		if err != nil {
+			setReturn(r.Context(), 403, err)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}

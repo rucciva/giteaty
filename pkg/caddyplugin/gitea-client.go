@@ -35,13 +35,13 @@ func (rt roundtripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return rt.RoundTripper.RoundTrip(req)
 }
 
-func (h *config) newGiteaClient(req *http.Request) *gitea.Client {
+func (drt *directive) newGiteaClient(req *http.Request) *gitea.Client {
 	rt := roundtripper{RoundTripper: http.DefaultTransport, caddyReq: req}
-	if h.giteaAllowInsecure {
+	if drt.giteaAllowInsecure {
 		rt.RoundTripper = &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
 	}
 	hc := &http.Client{Transport: rt}
-	gc := gitea.NewClientWithHTTP(h.giteaURL, hc)
+	gc := gitea.NewClientWithHTTP(drt.giteaURL, hc)
 	return gc
 }

@@ -14,15 +14,15 @@ type orgConfig struct {
 	teams  map[string]bool
 }
 
-func (h *config) assertOrgTeam(req *http.Request, orgname string) (err error) {
-	gcl := h.newGiteaClient(req)
+func (drt *directive) assertOrgTeam(req *http.Request, orgname string) (err error) {
+	gcl := drt.newGiteaClient(req)
 	teams, err := gcl.ListMyTeams(&gitea.ListTeamsOptions{})
 	if err != nil {
 		return errUnauthorized
 	}
 	for _, team := range teams {
 		if strings.EqualFold(team.Organization.UserName, orgname) {
-			if _, ok := h.org.teams[strings.ToLower(team.Name)]; ok {
+			if _, ok := drt.org.teams[strings.ToLower(team.Name)]; ok {
 				return
 			}
 		}
@@ -30,9 +30,9 @@ func (h *config) assertOrgTeam(req *http.Request, orgname string) (err error) {
 	return errUnauthorized
 }
 
-func (h *config) assertOrgTeamMiddleware(next http.Handler) http.Handler {
+func (drt *directive) assertOrgTeamMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		err := h.assertOrgTeam(r, chi.URLParam(r, "org"))
+		err := drt.assertOrgTeam(r, chi.URLParam(r, "org"))
 		if err != nil {
 			setReturn(r.Context(), 403, err)
 			return
@@ -41,9 +41,9 @@ func (h *config) assertOrgTeamMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (h *config) assertStaticOrgTeamMiddleware(next http.Handler) http.Handler {
+func (drt *directive) assertStaticOrgTeamMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		err := h.assertOrgTeam(r, h.org.path)
+		err := drt.assertOrgTeam(r, drt.org.path)
 		if err != nil {
 			setReturn(r.Context(), 403, err)
 			return

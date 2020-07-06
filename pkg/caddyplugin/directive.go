@@ -8,7 +8,7 @@ import (
 	"github.com/caddyserver/caddy"
 )
 
-type config struct {
+type directive struct {
 	giteaURL           string
 	giteaAllowInsecure bool
 
@@ -18,9 +18,9 @@ type config struct {
 	org          *orgConfig
 }
 
-func parseConfiguration(c *caddy.Controller) (cfgs []*config, err error) {
+func parseDirectives(c *caddy.Controller) (drts []*directive, err error) {
 	for c.Next() {
-		cfg := new(config)
+		cfg := new(directive)
 
 		var u string
 		switch args := c.RemainingArgs(); len(args) {
@@ -40,35 +40,35 @@ func parseConfiguration(c *caddy.Controller) (cfgs []*config, err error) {
 		if err = parseBlock(c, cfg); err != nil {
 			return nil, err
 		}
-		cfgs = append(cfgs, cfg)
+		drts = append(drts, cfg)
 	}
 
-	return cfgs, nil
+	return drts, nil
 }
 
-func parseBlock(c *caddy.Controller, cfg *config) (err error) {
+func parseBlock(c *caddy.Controller, drt *directive) (err error) {
 	prevSection := ""
 	for c.NextBlock() {
 		v := c.Val()
 		switch v {
 		case "allowInsecure":
-			cfg.giteaAllowInsecure = true
+			drt.giteaAllowInsecure = true
 
 		case "setBasicAuth":
-			if cfg.setBasicAuth != nil {
+			if drt.setBasicAuth != nil {
 				return fmt.Errorf("can only have one 'setBasicAuth' section")
 			}
 			args := c.RemainingArgs()
 			if len(args) != 1 {
 				return fmt.Errorf("setBasicAuth take 1 password arg")
 			}
-			cfg.setBasicAuth = &args[0]
+			drt.setBasicAuth = &args[0]
 
 		case "repo":
-			if cfg.repo != nil {
+			if drt.repo != nil {
 				return fmt.Errorf("can only have one 'repo' section")
 			}
-			cfg.repo = &repoConfig{
+			drt.repo = &repoConfig{
 				path: "/{owner}/{repo}",
 			}
 			args := c.RemainingArgs()
@@ -81,21 +81,21 @@ func parseBlock(c *caddy.Controller, cfg *config) (err error) {
 			}
 
 			if !strings.HasPrefix(args[0], "/") && strings.Count(args[0], "/") == 1 {
-				cfg.repo.static = true
-				cfg.repo.path = args[0]
+				drt.repo.static = true
+				drt.repo.path = args[0]
 				break
 			}
 
 			if strings.Count(args[0], "{owner}") != 1 || strings.Count(args[0], "{repo}") != 1 {
 				return fmt.Errorf("path should have 1 '{owner}' and 1 '{repo}' element")
 			}
-			cfg.repo.path = args[0]
+			drt.repo.path = args[0]
 
 		case "org":
-			if cfg.org != nil {
+			if drt.org != nil {
 				return fmt.Errorf("can only have one 'org' section")
 			}
-			cfg.org = &orgConfig{
+			drt.org = &orgConfig{
 				path:  "/{org}",
 				teams: map[string]bool{"owners": true},
 			}
@@ -109,22 +109,22 @@ func parseBlock(c *caddy.Controller, cfg *config) (err error) {
 			}
 
 			if !strings.HasPrefix(args[0], "/") && strings.Count(args[0], "/") == 0 {
-				cfg.org.static = true
-				cfg.org.path = args[0]
+				drt.org.static = true
+				drt.org.path = args[0]
 				break
 			}
 
 			if strings.Count(args[0], "{org}") != 1 {
 				return fmt.Errorf("path should have 1 '{org}' element")
 			}
-			cfg.org.path = args[0]
+			drt.org.path = args[0]
 
 		case "{":
 			switch prevSection {
 			case "repo":
-				err = parseRepoSubBlock(c, cfg)
+				err = parseRepoSubBlock(c, drt)
 			case "org":
-				err = parseOrgSubBlock(c, cfg)
+				err = parseOrgSubBlock(c, drt)
 			default:
 				err = fmt.Errorf("'%s' is not a sub block", prevSection)
 			}
@@ -140,13 +140,13 @@ func parseBlock(c *caddy.Controller, cfg *config) (err error) {
 	return
 }
 
-func parseRepoSubBlock(c *caddy.Controller, cfg *config) (err error) {
+func parseRepoSubBlock(c *caddy.Controller, drt *directive) (err error) {
 	for next := c.Next(); next && c.Val() != "}"; next = c.Next() {
 		switch v := c.Val(); v {
 		case "orgFailover":
-			cfg.repo.orgFailover = true
+			drt.repo.orgFailover = true
 		case "matchPermission":
-			cfg.repo.matchPermission = true
+			drt.repo.matchPermission = true
 		default:
 			return fmt.Errorf("unknwon keyword '%s' in organization block", v)
 		}
@@ -155,22 +155,32 @@ func parseRepoSubBlock(c *caddy.Controller, cfg *config) (err error) {
 	return
 }
 
-func parseOrgSubBlock(c *caddy.Controller, cfg *config) (err error) {
-	delete(cfg.org.teams, "owners")
+func parseOrgSubBlock(c *caddy.Controller, drt *directive) (err error) {
+	delete(drt.org.teams, "owners")
 
 	for next := c.Next(); next && c.Val() != "}"; next = c.Next() {
 		switch v := c.Val(); v {
 		case "teams":
 			for _, arg := range c.RemainingArgs() {
-				cfg.org.teams[arg] = true
+				drt.org.teams[arg] = true
 			}
 		default:
 			return fmt.Errorf("unknwon keyword '%s' in organization block", v)
 		}
 	}
 
-	if len(cfg.org.teams) == 0 {
-		cfg.org.teams["owners"] = true
+	if len(drt.org.teams) == 0 {
+		drt.org.teams["owners"] = true
 	}
+	return
+}
+
+func validateDirectives(drts []*directive) (err error) {
+	defer func() {
+		if err1 := recover(); err1 != nil && err != nil {
+			err = fmt.Errorf("invalid configuration: %s", err1)
+		}
+	}()
+	newHandler(nil, drts)
 	return
 }

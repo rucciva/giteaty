@@ -15,8 +15,8 @@ type repoConfig struct {
 	matchPermission bool
 }
 
-func (h *config) assertRepo(req *http.Request, owner string, reponame string) (err error) {
-	gcli := h.newGiteaClient(req)
+func (drt *directive) assertRepo(req *http.Request, owner string, reponame string) (err error) {
+	gcli := drt.newGiteaClient(req)
 	repo, err := gcli.GetRepo(owner, reponame)
 	if err != nil {
 		return errUnauthorized
@@ -26,7 +26,7 @@ func (h *config) assertRepo(req *http.Request, owner string, reponame string) (e
 		return errUnauthorized
 	}
 
-	if !h.repo.matchPermission {
+	if !drt.repo.matchPermission {
 		return
 	}
 
@@ -57,11 +57,11 @@ func (h *config) assertRepo(req *http.Request, owner string, reponame string) (e
 	return errUnauthorized
 }
 
-func (h *config) assertRepoMiddleware(next http.Handler) http.Handler {
+func (drt *directive) assertRepoMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		err := h.assertRepo(r, chi.URLParam(r, "owner"), chi.URLParam(r, "repo"))
-		if err != nil && h.repo.orgFailover && h.org != nil {
-			err = h.assertOrgTeam(r, chi.URLParam(r, "owner"))
+		err := drt.assertRepo(r, chi.URLParam(r, "owner"), chi.URLParam(r, "repo"))
+		if err != nil && drt.repo.orgFailover && drt.org != nil {
+			err = drt.assertOrgTeam(r, chi.URLParam(r, "owner"))
 		}
 		if err != nil {
 			setReturn(r.Context(), 403, err)
@@ -71,12 +71,12 @@ func (h *config) assertRepoMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (h *config) assertStaticRepoMiddleware(next http.Handler) http.Handler {
+func (drt *directive) assertStaticRepoMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		p := strings.Split(h.org.path, "/")
-		err := h.assertRepo(r, p[0], p[1])
-		if err != nil && h.repo.orgFailover && h.org != nil {
-			err = h.assertOrgTeam(r, p[0])
+		p := strings.Split(drt.org.path, "/")
+		err := drt.assertRepo(r, p[0], p[1])
+		if err != nil && drt.repo.orgFailover && drt.org != nil {
+			err = drt.assertOrgTeam(r, p[0])
 		}
 		if err != nil {
 			setReturn(r.Context(), 403, err)

@@ -26,56 +26,56 @@ func setReturn(ctx context.Context, i int, err error) {
 		return
 	}
 	ret.i, ret.err = i, err
-
 }
 
 type handler struct {
-	next httpserver.Handler
-	cfg  []*config
+	next       httpserver.Handler
+	directives []*directive
 
 	router http.Handler
 }
 
-func newHandler(next httpserver.Handler, cfg []*config) *handler {
-	h := &handler{next: next, cfg: cfg}
+func newHandler(next httpserver.Handler, drts []*directive) *handler {
+	h := &handler{next: next, directives: drts}
 	h.initRouter()
 	return h
 }
 
 func (h *handler) initRouter() {
-	next := func(w http.ResponseWriter, r *http.Request) {
+	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		i, err := h.next.ServeHTTP(w, r)
 		setReturn(r.Context(), i, err)
-	}
+	})
 	router := chi.NewRouter()
 	router.NotFound(http.HandlerFunc(next))
 
-	for _, cfg := range h.cfg {
+	for _, drt := range h.directives {
+		router.Route(drt.basePath, func(r chi.Router) {
 
-		router.Route(cfg.basePath, func(r chi.Router) {
-			if cfg.repo == nil && cfg.org == nil || cfg.setBasicAuth != nil {
-				r.Use(cfg.assertUserMiddleware)
+			if drt.repo == nil && drt.org == nil || drt.setBasicAuth != nil {
+				r.Use(drt.assertUserMiddleware)
+			}
+			if drt.repo == nil && drt.org == nil {
+				r.Handle("/*", next)
 			}
 
-			if cfg.repo == nil && cfg.org == nil {
-				r.Handle("/*", http.HandlerFunc(next))
-			}
-
-			if repo := cfg.repo; repo != nil {
+			if repo := drt.repo; repo != nil {
 				switch repo.static {
 				case true:
-					r.Use(cfg.assertStaticRepoMiddleware)
+					r.Use(drt.assertStaticRepoMiddleware)
+					r.Handle("/*", next)
 				case false:
-					r.Handle(repo.path, cfg.assertRepoMiddleware(http.HandlerFunc(next)))
+					r.Handle(repo.path, drt.assertRepoMiddleware(next))
 				}
 			}
 
-			if org := cfg.org; org != nil {
+			if org := drt.org; org != nil {
 				switch org.static {
 				case true:
-					r.Use(cfg.assertStaticOrgTeamMiddleware)
+					r.Use(drt.assertStaticOrgTeamMiddleware)
+					r.Handle("/*", next)
 				case false:
-					r.Handle(org.path, cfg.assertOrgTeamMiddleware(http.HandlerFunc(next)))
+					r.Handle(org.path, drt.assertOrgTeamMiddleware(next))
 				}
 			}
 
@@ -86,7 +86,7 @@ func (h *handler) initRouter() {
 }
 
 func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) (i int, err error) {
-	ret := &handlerReturn{}
+	ret := &handlerReturn{i: 200}
 	r = r.WithContext(context.WithValue(r.Context(), handlerReturnKey{}, ret))
 	h.router.ServeHTTP(w, r)
 	return ret.i, ret.err

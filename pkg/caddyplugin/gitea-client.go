@@ -10,37 +10,33 @@ import (
 type roundtripper struct {
 	http.RoundTripper
 
-	req *http.Request
+	caddyReq *http.Request
 }
 
-func cloneRequest(r *http.Request) *http.Request {
-	// shallow copy of the struct
-	r2 := new(http.Request)
-	*r2 = *r
-	// deep copy of the Header and URL
-	r2.Header = make(http.Header, len(r.Header))
-	for k, s := range r.Header {
-		r2.Header[k] = append([]string(nil), s...)
-	}
-	*r2.URL = *r.URL
-	return r2
-}
-
-func (r roundtripper) RoundTrip(req *http.Request) (*http.Response, error) {
+func (rt roundtripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	if req.Body != nil {
 		defer req.Body.Close()
 	}
-	req2 := cloneRequest(req)
 
-	req2.Header.Set("Authorization", r.req.Header.Get("Authorization"))
-	req2.Header.Set("X-Gitea-OTP", r.req.Header.Get("X-Gitea-OTP"))
-	req2.URL.Query().Set("access_token", r.req.URL.Query().Get("access_token"))
-	req2.URL.Query().Set("token", r.req.URL.Query().Get("token"))
-	return r.RoundTripper.RoundTrip(req2)
+	req = req.Clone(req.Context())
+	if v, ok := rt.caddyReq.Header[http.CanonicalHeaderKey("Authorization")]; ok {
+		req.Header[http.CanonicalHeaderKey("Authorization")] = append([]string(nil), v...)
+	}
+	if v, ok := rt.caddyReq.Header[http.CanonicalHeaderKey("X-Gitea-OTP")]; ok {
+		req.Header[http.CanonicalHeaderKey("X-Gitea-OTP")] = append([]string(nil), v...)
+	}
+	if v, ok := rt.caddyReq.URL.Query()["access_token"]; ok {
+		req.URL.Query()["access_token"] = append([]string(nil), v...)
+	}
+	if v, ok := rt.caddyReq.URL.Query()["token"]; ok {
+		req.URL.Query()["token"] = append([]string(nil), v...)
+	}
+
+	return rt.RoundTripper.RoundTrip(req)
 }
 
 func (h *handler) newGiteaClient(req *http.Request) *gitea.Client {
-	rt := roundtripper{RoundTripper: http.DefaultTransport, req: req}
+	rt := roundtripper{RoundTripper: http.DefaultTransport, caddyReq: req}
 	if h.cfg.giteaAllowInsecure {
 		rt.RoundTripper = &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}

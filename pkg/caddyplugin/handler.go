@@ -53,15 +53,28 @@ func (h *handler) initRouter() {
 			r.Use(h.assertUserMiddleware)
 		}
 
-		if h.cfg.repo != nil {
-			r.Handle(h.cfg.repo.path, h.assertRepoMiddleware(http.HandlerFunc(next)))
-		}
-		if h.cfg.org != nil {
-			r.Handle(h.cfg.org.path, h.assertOrgTeamMiddleware(http.HandlerFunc(next)))
-		}
 		if h.cfg.repo == nil && h.cfg.org == nil {
 			r.Handle("/*", http.HandlerFunc(next))
 		}
+
+		if repo := h.cfg.repo; repo != nil {
+			switch repo.static {
+			case true:
+				r.Use(h.assertStaticRepoMiddleware)
+			case false:
+				r.Handle(repo.path, h.assertRepoMiddleware(http.HandlerFunc(next)))
+			}
+		}
+
+		if org := h.cfg.org; org != nil {
+			switch org.static {
+			case true:
+				r.Use(h.assertStaticOrgTeamMiddleware)
+			case false:
+				r.Handle(org.path, h.assertOrgTeamMiddleware(http.HandlerFunc(next)))
+			}
+		}
+
 	})
 	router.NotFound(http.HandlerFunc(next))
 	h.router = router

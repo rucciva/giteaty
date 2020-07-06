@@ -9,8 +9,9 @@ import (
 )
 
 type orgConfig struct {
-	path  string
-	teams map[string]bool
+	static bool
+	path   string
+	teams  map[string]bool
 }
 
 func (h *handler) assertOrgTeam(req *http.Request, orgname string) (err error) {
@@ -32,6 +33,17 @@ func (h *handler) assertOrgTeam(req *http.Request, orgname string) (err error) {
 func (h *handler) assertOrgTeamMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		err := h.assertOrgTeam(r, chi.URLParam(r, "org"))
+		if err != nil {
+			setReturn(r.Context(), 403, err)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (h *handler) assertStaticOrgTeamMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		err := h.assertOrgTeam(r, h.cfg.org.path)
 		if err != nil {
 			setReturn(r.Context(), 403, err)
 			return

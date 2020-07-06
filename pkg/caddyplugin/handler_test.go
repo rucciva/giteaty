@@ -22,7 +22,7 @@ type testResponse struct {
 }
 
 type testHandler struct {
-	handler httpserver.Handler
+	handler *handler
 
 	giteaReq []*http.Request
 	fwddReq  *http.Request
@@ -52,7 +52,7 @@ func tNewHandler(t *testing.T, conf string, ress []testResponse) (h *testHandler
 		h.fwddReq = r
 		return 201, nil
 	})
-	h.handler = httpserver.GetConfig(c).Middleware()[0](n)
+	h.handler, _ = httpserver.GetConfig(c).Middleware()[0](n).(*handler)
 	return
 }
 

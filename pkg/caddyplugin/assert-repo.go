@@ -9,6 +9,7 @@ import (
 )
 
 type repoConfig struct {
+	static          bool
 	path            string
 	orgFailover     bool
 	matchPermission bool
@@ -61,6 +62,21 @@ func (h *handler) assertRepoMiddleware(next http.Handler) http.Handler {
 		err := h.assertRepo(r, chi.URLParam(r, "owner"), chi.URLParam(r, "repo"))
 		if err != nil && h.cfg.repo.orgFailover && h.cfg.org != nil {
 			err = h.assertOrgTeam(r, chi.URLParam(r, "owner"))
+		}
+		if err != nil {
+			setReturn(r.Context(), 403, err)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (h *handler) assertStaticRepoMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p := strings.Split(h.cfg.org.path, "/")
+		err := h.assertRepo(r, p[0], p[1])
+		if err != nil && h.cfg.repo.orgFailover && h.cfg.org != nil {
+			err = h.assertOrgTeam(r, p[0])
 		}
 		if err != nil {
 			setReturn(r.Context(), 403, err)

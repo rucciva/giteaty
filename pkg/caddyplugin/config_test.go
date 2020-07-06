@@ -11,22 +11,33 @@ import (
 func TestParseConfiguration(t *testing.T) {
 	data := []struct {
 		input string
-		cfg   *config
+		cfg   []*config
 		err   error
 	}{
 		{
-			input: `gitea-auth https://gitea.io`,
-			cfg: &config{
-				giteaURL: "https://gitea.io",
-				basePath: "/",
+			input: `
+				gitea-auth https://gitea.io
+				gitea-auth /test https://gitea.io
+			`,
+			cfg: []*config{
+				{
+					giteaURL: "https://gitea.io",
+					basePath: "/",
+				},
+				{
+					giteaURL: "https://gitea.io",
+					basePath: "/test",
+				},
 			},
 		},
 
 		{
 			input: `gitea-auth /test https://gitea.io`,
-			cfg: &config{
-				giteaURL: "https://gitea.io",
-				basePath: "/test",
+			cfg: []*config{
+				{
+					giteaURL: "https://gitea.io",
+					basePath: "/test",
+				},
 			},
 		},
 
@@ -36,11 +47,13 @@ func TestParseConfiguration(t *testing.T) {
 				repo
 			}
 			`,
-			cfg: &config{
-				giteaURL: "https://gitea.io",
-				basePath: "/test",
-				repo: &repoConfig{
-					path: "/{owner}/{repo}",
+			cfg: []*config{
+				{
+					giteaURL: "https://gitea.io",
+					basePath: "/test",
+					repo: &repoConfig{
+						path: "/{owner}/{repo}",
+					},
 				},
 			},
 		},
@@ -51,11 +64,13 @@ func TestParseConfiguration(t *testing.T) {
 				repo /{owner}/{repo}
 			}
 			`,
-			cfg: &config{
-				giteaURL: "https://gitea.io",
-				basePath: "/test",
-				repo: &repoConfig{
-					path: "/{owner}/{repo}",
+			cfg: []*config{
+				{
+					giteaURL: "https://gitea.io",
+					basePath: "/test",
+					repo: &repoConfig{
+						path: "/{owner}/{repo}",
+					},
 				},
 			},
 		},
@@ -66,12 +81,14 @@ func TestParseConfiguration(t *testing.T) {
 				repo rucciva/test
 			}
 			`,
-			cfg: &config{
-				giteaURL: "https://gitea.io",
-				basePath: "/test",
-				repo: &repoConfig{
-					static: true,
-					path:   "rucciva/test",
+			cfg: []*config{
+				{
+					giteaURL: "https://gitea.io",
+					basePath: "/test",
+					repo: &repoConfig{
+						static: true,
+						path:   "rucciva/test",
+					},
 				},
 			},
 		},
@@ -84,12 +101,14 @@ func TestParseConfiguration(t *testing.T) {
 				}
 			}
 			`,
-			cfg: &config{
-				giteaURL: "https://gitea.io",
-				basePath: "/test",
-				repo: &repoConfig{
-					path:        "/{owner}/{repo}",
-					orgFailover: true,
+			cfg: []*config{
+				{
+					giteaURL: "https://gitea.io",
+					basePath: "/test",
+					repo: &repoConfig{
+						path:        "/{owner}/{repo}",
+						orgFailover: true,
+					},
 				},
 			},
 		},
@@ -103,14 +122,16 @@ func TestParseConfiguration(t *testing.T) {
 				}
 			}
 			`,
-			cfg: &config{
-				giteaURL: "https://gitea.io",
-				basePath: "/test",
-				repo: &repoConfig{
-					static:          true,
-					path:            "rucciva/test",
-					orgFailover:     true,
-					matchPermission: true,
+			cfg: []*config{
+				{
+					giteaURL: "https://gitea.io",
+					basePath: "/test",
+					repo: &repoConfig{
+						static:          true,
+						path:            "rucciva/test",
+						orgFailover:     true,
+						matchPermission: true,
+					},
 				},
 			},
 		},
@@ -120,14 +141,16 @@ func TestParseConfiguration(t *testing.T) {
 			gitea-auth /test  https://gitea.io/ {
 				org 
 			}`,
-			cfg: &config{
-				giteaURL: "https://gitea.io",
+			cfg: []*config{
+				{
+					giteaURL: "https://gitea.io",
 
-				basePath: "/test",
-				org: &orgConfig{
-					path: "/{org}",
-					teams: map[string]bool{
-						"owners": true,
+					basePath: "/test",
+					org: &orgConfig{
+						path: "/{org}",
+						teams: map[string]bool{
+							"owners": true,
+						},
 					},
 				},
 			},
@@ -138,14 +161,16 @@ func TestParseConfiguration(t *testing.T) {
 			gitea-auth /test  https://gitea.io/ {
 				org /my/{org}.js
 			}`,
-			cfg: &config{
-				giteaURL: "https://gitea.io",
+			cfg: []*config{
+				{
+					giteaURL: "https://gitea.io",
 
-				basePath: "/test",
-				org: &orgConfig{
-					path: "/my/{org}.js",
-					teams: map[string]bool{
-						"owners": true,
+					basePath: "/test",
+					org: &orgConfig{
+						path: "/my/{org}.js",
+						teams: map[string]bool{
+							"owners": true,
+						},
 					},
 				},
 			},
@@ -157,14 +182,16 @@ func TestParseConfiguration(t *testing.T) {
 				org rucciva
 			}
 			`,
-			cfg: &config{
-				giteaURL: "https://gitea.io",
-				basePath: "/test",
-				org: &orgConfig{
-					static: true,
-					path:   "rucciva",
-					teams: map[string]bool{
-						"owners": true,
+			cfg: []*config{
+				{
+					giteaURL: "https://gitea.io",
+					basePath: "/test",
+					org: &orgConfig{
+						static: true,
+						path:   "rucciva",
+						teams: map[string]bool{
+							"owners": true,
+						},
 					},
 				},
 			},
@@ -177,15 +204,17 @@ func TestParseConfiguration(t *testing.T) {
 					teams tester developer
 				}
 			}`,
-			cfg: &config{
-				giteaURL: "https://gitea.io",
+			cfg: []*config{
+				{
+					giteaURL: "https://gitea.io",
 
-				basePath: "/test",
-				org: &orgConfig{
-					path: "/my/{org}.js",
-					teams: map[string]bool{
-						"tester":    true,
-						"developer": true,
+					basePath: "/test",
+					org: &orgConfig{
+						path: "/my/{org}.js",
+						teams: map[string]bool{
+							"tester":    true,
+							"developer": true,
+						},
 					},
 				},
 			},
@@ -203,21 +232,23 @@ func TestParseConfiguration(t *testing.T) {
 					teams tester developer
 				}
 			}`,
-			cfg: &config{
-				giteaURL:           "https://gitea.io",
-				giteaAllowInsecure: true,
+			cfg: []*config{
+				{
+					giteaURL:           "https://gitea.io",
+					giteaAllowInsecure: true,
 
-				basePath: "/test",
-				repo: &repoConfig{
-					path:            "/re/{owner}/{repo}.js",
-					matchPermission: true,
-					orgFailover:     true,
-				},
-				org: &orgConfig{
-					path: "/my/{org}.js",
-					teams: map[string]bool{
-						"tester":    true,
-						"developer": true,
+					basePath: "/test",
+					repo: &repoConfig{
+						path:            "/re/{owner}/{repo}.js",
+						matchPermission: true,
+						orgFailover:     true,
+					},
+					org: &orgConfig{
+						path: "/my/{org}.js",
+						teams: map[string]bool{
+							"tester":    true,
+							"developer": true,
+						},
 					},
 				},
 			},
@@ -236,23 +267,25 @@ func TestParseConfiguration(t *testing.T) {
 					teams tester developer
 				}
 			}`,
-			cfg: &config{
-				giteaURL:           "https://gitea.io",
-				giteaAllowInsecure: true,
-				setBasicAuth:       func(s string) *string { return &s }("somepassword"),
-				basePath:           "/test",
-				repo: &repoConfig{
-					static:          true,
-					path:            "rucciva/repo",
-					matchPermission: true,
-					orgFailover:     true,
-				},
-				org: &orgConfig{
-					static: true,
-					path:   "myorg",
-					teams: map[string]bool{
-						"tester":    true,
-						"developer": true,
+			cfg: []*config{
+				{
+					giteaURL:           "https://gitea.io",
+					giteaAllowInsecure: true,
+					setBasicAuth:       func(s string) *string { return &s }("somepassword"),
+					basePath:           "/test",
+					repo: &repoConfig{
+						static:          true,
+						path:            "rucciva/repo",
+						matchPermission: true,
+						orgFailover:     true,
+					},
+					org: &orgConfig{
+						static: true,
+						path:   "myorg",
+						teams: map[string]bool{
+							"tester":    true,
+							"developer": true,
+						},
 					},
 				},
 			},
@@ -264,7 +297,7 @@ func TestParseConfiguration(t *testing.T) {
 			c := caddy.NewTestController("http", d.input)
 			r, err := parseConfiguration(c)
 			assert.Equal(t, d.err, err)
-			assert.Equal(t, d.cfg, r)
+			assert.ElementsMatch(t, d.cfg, r)
 		})
 	}
 }

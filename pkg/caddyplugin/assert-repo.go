@@ -15,7 +15,7 @@ type repoConfig struct {
 	matchPermission bool
 }
 
-func (h *handler) assertRepo(req *http.Request, owner string, reponame string) (err error) {
+func (h *config) assertRepo(req *http.Request, owner string, reponame string) (err error) {
 	gcli := h.newGiteaClient(req)
 	repo, err := gcli.GetRepo(owner, reponame)
 	if err != nil {
@@ -26,7 +26,7 @@ func (h *handler) assertRepo(req *http.Request, owner string, reponame string) (
 		return errUnauthorized
 	}
 
-	if !h.cfg.repo.matchPermission {
+	if !h.repo.matchPermission {
 		return
 	}
 
@@ -57,10 +57,10 @@ func (h *handler) assertRepo(req *http.Request, owner string, reponame string) (
 	return errUnauthorized
 }
 
-func (h *handler) assertRepoMiddleware(next http.Handler) http.Handler {
+func (h *config) assertRepoMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		err := h.assertRepo(r, chi.URLParam(r, "owner"), chi.URLParam(r, "repo"))
-		if err != nil && h.cfg.repo.orgFailover && h.cfg.org != nil {
+		if err != nil && h.repo.orgFailover && h.org != nil {
 			err = h.assertOrgTeam(r, chi.URLParam(r, "owner"))
 		}
 		if err != nil {
@@ -71,11 +71,11 @@ func (h *handler) assertRepoMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (h *handler) assertStaticRepoMiddleware(next http.Handler) http.Handler {
+func (h *config) assertStaticRepoMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		p := strings.Split(h.cfg.org.path, "/")
+		p := strings.Split(h.org.path, "/")
 		err := h.assertRepo(r, p[0], p[1])
-		if err != nil && h.cfg.repo.orgFailover && h.cfg.org != nil {
+		if err != nil && h.repo.orgFailover && h.org != nil {
 			err = h.assertOrgTeam(r, p[0])
 		}
 		if err != nil {

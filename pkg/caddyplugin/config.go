@@ -18,31 +18,32 @@ type config struct {
 	org          *orgConfig
 }
 
-func parseConfiguration(c *caddy.Controller) (cfg *config, err error) {
-	c.NextArg() // skip plugin name
+func parseConfiguration(c *caddy.Controller) (cfgs []*config, err error) {
+	for c.Next() {
+		cfg := new(config)
 
-	cfg = new(config)
-	var u string
-	switch args := c.RemainingArgs(); len(args) {
-	case 1:
-		cfg.basePath, u = "/", args[0]
-	case 2:
-		cfg.basePath, u = args[0], args[1]
-	default:
-		return cfg, fmt.Errorf("gitea base url is required")
+		var u string
+		switch args := c.RemainingArgs(); len(args) {
+		case 1:
+			cfg.basePath, u = "/", args[0]
+		case 2:
+			cfg.basePath, u = args[0], args[1]
+		default:
+			return nil, fmt.Errorf("gitea base url is required")
+		}
+		gurl, err := url.Parse(u)
+		if err != nil {
+			return nil, fmt.Errorf("invalid url %s: %v", c.Val(), err)
+		}
+		cfg.giteaURL = gurl.Scheme + "://" + gurl.Host
+
+		if err = parseBlock(c, cfg); err != nil {
+			return nil, err
+		}
+		cfgs = append(cfgs, cfg)
 	}
 
-	gurl, err := url.Parse(u)
-	if err != nil {
-		return cfg, fmt.Errorf("invalid url %s: %v", c.Val(), err)
-	}
-	cfg.giteaURL = gurl.Scheme + "://" + gurl.Host
-
-	if err = parseBlock(c, cfg); err != nil {
-		return nil, err
-	}
-
-	return cfg, nil
+	return cfgs, nil
 }
 
 func parseBlock(c *caddy.Controller, cfg *config) (err error) {

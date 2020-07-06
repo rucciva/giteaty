@@ -31,12 +31,12 @@ func setReturn(ctx context.Context, i int, err error) {
 
 type handler struct {
 	next httpserver.Handler
-	cfg  *config
+	cfg  []*config
 
 	router http.Handler
 }
 
-func newHandler(next httpserver.Handler, cfg *config) *handler {
+func newHandler(next httpserver.Handler, cfg []*config) *handler {
 	h := &handler{next: next, cfg: cfg}
 	h.initRouter()
 	return h
@@ -48,35 +48,40 @@ func (h *handler) initRouter() {
 		setReturn(r.Context(), i, err)
 	}
 	router := chi.NewRouter()
-	router.Route(h.cfg.basePath, func(r chi.Router) {
-		if h.cfg.repo == nil && h.cfg.org == nil || h.cfg.setBasicAuth != nil {
-			r.Use(h.assertUserMiddleware)
-		}
-
-		if h.cfg.repo == nil && h.cfg.org == nil {
-			r.Handle("/*", http.HandlerFunc(next))
-		}
-
-		if repo := h.cfg.repo; repo != nil {
-			switch repo.static {
-			case true:
-				r.Use(h.assertStaticRepoMiddleware)
-			case false:
-				r.Handle(repo.path, h.assertRepoMiddleware(http.HandlerFunc(next)))
-			}
-		}
-
-		if org := h.cfg.org; org != nil {
-			switch org.static {
-			case true:
-				r.Use(h.assertStaticOrgTeamMiddleware)
-			case false:
-				r.Handle(org.path, h.assertOrgTeamMiddleware(http.HandlerFunc(next)))
-			}
-		}
-
-	})
 	router.NotFound(http.HandlerFunc(next))
+
+	for _, cfg := range h.cfg {
+
+		router.Route(cfg.basePath, func(r chi.Router) {
+			if cfg.repo == nil && cfg.org == nil || cfg.setBasicAuth != nil {
+				r.Use(cfg.assertUserMiddleware)
+			}
+
+			if cfg.repo == nil && cfg.org == nil {
+				r.Handle("/*", http.HandlerFunc(next))
+			}
+
+			if repo := cfg.repo; repo != nil {
+				switch repo.static {
+				case true:
+					r.Use(cfg.assertStaticRepoMiddleware)
+				case false:
+					r.Handle(repo.path, cfg.assertRepoMiddleware(http.HandlerFunc(next)))
+				}
+			}
+
+			if org := cfg.org; org != nil {
+				switch org.static {
+				case true:
+					r.Use(cfg.assertStaticOrgTeamMiddleware)
+				case false:
+					r.Handle(org.path, cfg.assertOrgTeamMiddleware(http.HandlerFunc(next)))
+				}
+			}
+
+		})
+	}
+
 	h.router = router
 }
 

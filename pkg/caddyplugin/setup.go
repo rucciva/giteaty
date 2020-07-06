@@ -14,7 +14,7 @@ func init() {
 	})
 }
 
-func testConfig(c *config) (err error) {
+func testConfig(c []*config) (err error) {
 	defer func() {
 		if err1 := recover(); err1 != nil && err != nil {
 			err = fmt.Errorf("invalid configuration: %s", err1)

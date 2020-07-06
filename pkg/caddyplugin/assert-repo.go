@@ -8,6 +8,12 @@ import (
 	"github.com/go-chi/chi"
 )
 
+type repoConfig struct {
+	path            string
+	orgFailover     bool
+	matchPermission bool
+}
+
 func (h *handler) assertRepo(req *http.Request, owner string, reponame string) (err error) {
 	gcli := h.newGiteaClient(req)
 	repo, err := gcli.GetRepo(owner, reponame)
@@ -18,6 +24,11 @@ func (h *handler) assertRepo(req *http.Request, owner string, reponame string) (
 	if err != nil {
 		return errUnauthorized
 	}
+
+	if !h.cfg.repo.matchPermission {
+		return
+	}
+
 	switch strings.ToUpper(req.Method) {
 
 	// Read repo code
@@ -48,7 +59,7 @@ func (h *handler) assertRepo(req *http.Request, owner string, reponame string) (
 func (h *handler) assertRepoMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		err := h.assertRepo(r, chi.URLParam(r, "owner"), chi.URLParam(r, "repo"))
-		if err != nil && h.cfg.authzOrg {
+		if err != nil && h.cfg.repo.orgFailover && h.cfg.org != nil {
 			err = h.assertOrgTeam(r, chi.URLParam(r, "owner"))
 		}
 		if err != nil {

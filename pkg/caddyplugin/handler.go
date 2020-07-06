@@ -49,21 +49,21 @@ func (h *handler) initRouter() {
 	}
 	router := chi.NewRouter()
 	router.Route(h.cfg.basePath, func(r chi.Router) {
-		if h.cfg.authzRepo {
-			r.Route("/{owner}/{repo}", func(r chi.Router) {
-				r.Use(h.assertRepoMiddleware)
-				r.Handle("/*", http.HandlerFunc(next))
-			})
+		if h.cfg.repo == nil && h.cfg.org == nil || h.cfg.setBasicAuth != nil {
+			r.Use(h.assertUserMiddleware)
 		}
-		if h.cfg.authzOrg {
-			r.Route("/{org}", func(r chi.Router) {
-				r.Use(h.assertOrgTeamMiddleware)
-				r.Handle("/*", http.HandlerFunc(next))
-			})
+
+		if h.cfg.repo != nil {
+			r.Handle(h.cfg.repo.path, h.assertRepoMiddleware(http.HandlerFunc(next)))
 		}
-		r.Handle("/*", http.HandlerFunc(next))
+		if h.cfg.org != nil {
+			r.Handle(h.cfg.org.path, h.assertOrgTeamMiddleware(http.HandlerFunc(next)))
+		}
+		if h.cfg.repo == nil && h.cfg.org == nil {
+			r.Handle("/*", http.HandlerFunc(next))
+		}
 	})
-	router.Handle("/*", http.HandlerFunc(next))
+	router.NotFound(http.HandlerFunc(next))
 	h.router = router
 }
 

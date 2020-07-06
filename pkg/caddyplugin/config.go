@@ -3,6 +3,7 @@ package caddyplugin
 import (
 	"fmt"
 	"net/url"
+	"strings"
 
 	"github.com/caddyserver/caddy"
 )
@@ -11,15 +12,14 @@ type config struct {
 	giteaURL           string
 	giteaAllowInsecure bool
 
-	basePath      string
-	authzRepo     bool
-	authzOrg      bool
-	authzOrgTeams map[string]bool
-	authzPerm     bool
+	basePath     string
+	setBasicAuth *string
+	repo         *repoConfig
+	org          *orgConfig
 }
 
 func parseConfiguration(c *caddy.Controller) (r *config, err error) {
-	c.Next() // skip plugin name
+	c.NextArg() // skip plugin name
 
 	r = new(config)
 	var u string
@@ -38,8 +38,6 @@ func parseConfiguration(c *caddy.Controller) (r *config, err error) {
 	}
 	r.giteaURL = gurl.Scheme + "://" + gurl.Host
 
-	r.authzOrgTeams = make(map[string]bool)
-	r.authzOrgTeams["owners"] = true
 	if err = parseBlock(c, r); err != nil {
 		return
 	}
@@ -48,32 +46,105 @@ func parseConfiguration(c *caddy.Controller) (r *config, err error) {
 }
 
 func parseBlock(c *caddy.Controller, r *config) (err error) {
+	prevKey := ""
 	for c.NextBlock() {
-		switch v := c.Val(); v {
+		v := c.Val()
+		switch v {
 		case "allowInsecure":
 			r.giteaAllowInsecure = true
 
+		case "setBasicAuth":
+			args := c.RemainingArgs()
+			if len(args) != 1 {
+				return fmt.Errorf("setBasicAuth take 1 password arg")
+			}
+			r.setBasicAuth = &args[0]
+
 		case "repo":
-			r.authzRepo = true
+			r.repo = &repoConfig{
+				path: "/{owner}/{repo}",
+			}
+			args := c.RemainingArgs()
+			if len(args) > 1 {
+				return fmt.Errorf("repo only takes max 1 args")
+			}
+			if len(args) == 0 {
+				continue
+			}
+			if strings.Count(args[0], "{owner}") != 1 || strings.Count(args[0], "{repo}") != 1 {
+				return fmt.Errorf("path should have 1 '{owner}' and 1 '{repo}' element")
+			}
+			r.repo.path = args[0]
 
 		case "org":
-			r.authzOrg = true
-			for _, team := range c.RemainingArgs() {
-				r.authzOrgTeams[team] = true
+			r.org = &orgConfig{
+				path:  "/{org}",
+				teams: map[string]bool{"owners": true},
 			}
-		case "perm":
-			if len(c.RemainingArgs()) != 0 {
-				return fmt.Errorf("perm only take block")
+			args := c.RemainingArgs()
+			if len(args) > 1 {
+				return fmt.Errorf("org only takes max 1 args")
 			}
-			r.authzPerm = true
-			if err = parsePermissionBlock(c, r); err != nil {
+			if len(args) == 0 {
+				continue
+			}
+			if strings.Count(args[0], "{org}") != 1 {
+				return fmt.Errorf("path should have 1 '{org}' element")
+			}
+			r.org.path = args[0]
+
+		case "{":
+			switch prevKey {
+			case "repo":
+				err = parseRepoSubBlock(c, r)
+			case "org":
+				err = parseOrgSubBlock(c, r)
+			default:
+				err = fmt.Errorf("'%s' is not a sub block", prevKey)
+			}
+			if err != nil {
 				return
 			}
+
+		default:
+			return fmt.Errorf("invalid '%s' key", v)
 		}
+		prevKey = v
 	}
 	return
 }
 
-func parsePermissionBlock(c *caddy.Controller, r *config) (err error) {
+func parseRepoSubBlock(c *caddy.Controller, r *config) (err error) {
+	for next := c.Next(); next && c.Val() != "}"; next = c.Next() {
+		switch v := c.Val(); v {
+		case "orgFailover":
+			r.repo.orgFailover = true
+		case "matchPermission":
+			r.repo.matchPermission = true
+		default:
+			return fmt.Errorf("unknwon keyword '%s' in organization block", v)
+		}
+	}
+
+	return
+}
+
+func parseOrgSubBlock(c *caddy.Controller, r *config) (err error) {
+	delete(r.org.teams, "owners")
+
+	for next := c.Next(); next && c.Val() != "}"; next = c.Next() {
+		switch v := c.Val(); v {
+		case "teams":
+			for _, arg := range c.RemainingArgs() {
+				r.org.teams[arg] = true
+			}
+		default:
+			return fmt.Errorf("unknwon keyword '%s' in organization block", v)
+		}
+	}
+
+	if len(r.org.teams) == 0 {
+		r.org.teams["owners"] = true
+	}
 	return
 }

@@ -8,6 +8,11 @@ import (
 	"github.com/go-chi/chi"
 )
 
+type orgConfig struct {
+	path  string
+	teams map[string]bool
+}
+
 func (h *handler) assertOrgTeam(req *http.Request, orgname string) (err error) {
 	gcl := h.newGiteaClient(req)
 	teams, err := gcl.ListMyTeams(&gitea.ListTeamsOptions{})
@@ -16,7 +21,7 @@ func (h *handler) assertOrgTeam(req *http.Request, orgname string) (err error) {
 	}
 	for _, team := range teams {
 		if strings.EqualFold(team.Organization.UserName, orgname) {
-			if _, ok := h.cfg.authzOrgTeams[strings.ToLower(team.Name)]; ok {
+			if _, ok := h.cfg.org.teams[strings.ToLower(team.Name)]; ok {
 				return
 			}
 		}

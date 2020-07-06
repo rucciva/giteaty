@@ -36,7 +36,7 @@ func (r roundtripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	req2.Header.Set("X-Gitea-OTP", r.req.Header.Get("X-Gitea-OTP"))
 	req2.URL.Query().Set("access_token", r.req.URL.Query().Get("access_token"))
 	req2.URL.Query().Set("token", r.req.URL.Query().Get("token"))
-	return r.RoundTripper.RoundTrip(req)
+	return r.RoundTripper.RoundTrip(req2)
 }
 
 func (h *handler) newGiteaClient(req *http.Request) *gitea.Client {

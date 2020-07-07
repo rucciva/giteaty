@@ -11,6 +11,7 @@ import (
 	"code.gitea.io/sdk/gitea"
 	"github.com/caddyserver/caddy"
 	"github.com/caddyserver/caddy/caddyhttp/httpserver"
+	"github.com/go-chi/chi"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -90,4 +91,33 @@ func TestHandlerAssertUser(t *testing.T) {
 	assert.Equal(t, "pass", p, "should pass password")
 	assert.True(t, ok, "should pass basic auth")
 
+}
+
+func TestChi(t *testing.T) {
+	r := chi.NewRouter()
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Println("middleware")
+			next.ServeHTTP(w, r)
+		})
+	})
+	r.Handle("/*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println(chi.RouteContext(r.Context()).RoutePattern())
+	}))
+	r.Handle("/{test}/{info}", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println(chi.RouteContext(r.Context()).RoutePattern())
+	}))
+	r.Handle("/test*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println(chi.RouteContext(r.Context()).RoutePattern())
+	}))
+
+	w := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodGet, "/info", nil)
+	r.ServeHTTP(w, req)
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/tes/info", nil)
+	r.ServeHTTP(w, req)
+	w = httptest.NewRecorder()
+	req = httptest.NewRequest(http.MethodGet, "/test/info", nil)
+	r.ServeHTTP(w, req)
 }

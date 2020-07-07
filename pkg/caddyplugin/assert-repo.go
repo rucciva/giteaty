@@ -73,7 +73,7 @@ func (drt *directive) assertRepoMiddleware(next http.Handler) http.Handler {
 
 func (drt *directive) assertStaticRepoMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		p := strings.Split(drt.org.path, "/")
+		p := strings.Split(drt.repo.path, "/")
 		err := drt.assertRepo(r, p[0], p[1])
 		if err != nil && drt.repo.orgFailover && drt.org != nil {
 			err = drt.assertOrgTeam(r, p[0])

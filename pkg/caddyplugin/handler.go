@@ -51,38 +51,37 @@ func (h *handler) initRouter() {
 
 	for _, drt := range h.directives {
 		router.Route(drt.basePath, func(r chi.Router) {
-			mid := []func(http.Handler) http.Handler{}
-			handler := map[string]http.Handler{}
-
 			if drt.repo == nil && drt.org == nil || drt.setBasicAuth != nil {
-				mid = append(mid, drt.assertUserMiddleware)
+				r.Use(drt.assertUserMiddleware)
 			}
 
 			if repo := drt.repo; repo != nil {
 				switch repo.static {
 				case true:
-					mid = append(mid, drt.assertStaticRepoMiddleware)
+					r.Use(drt.assertStaticRepoMiddleware)
 				case false:
-					handler[repo.path] = drt.assertRepoMiddleware(next)
+					r.Route(repo.path, func(r chi.Router) {
+						r.Use(drt.assertRepoMiddleware)
+						r.Handle("/*", next)
+					})
+
 				}
 			}
 
 			if org := drt.org; org != nil {
 				switch org.static {
 				case true:
-					mid = append(mid, drt.assertStaticOrgTeamMiddleware)
+					r.Use(drt.assertStaticOrgTeamMiddleware)
 				case false:
-					handler[org.path] = drt.assertOrgTeamMiddleware(next)
+					r.Route(org.path, func(r chi.Router) {
+						r.Use(drt.assertOrgTeamMiddleware)
+						r.Handle("/*", next)
+					})
+
 				}
 			}
 
-			for _, h := range mid {
-				r.Use(h)
-			}
-			for p, h := range handler {
-				r.Handle(p, h)
-			}
-			r.Handle("/*", next) // catch all lowest priority
+			r.Handle("/*", next)
 		})
 	}
 

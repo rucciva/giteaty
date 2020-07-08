@@ -11,21 +11,27 @@ import (
 
 type handlerReturnKey struct{}
 type handlerReturn struct {
-	i   int
-	err error
+	i    int
+	err  error
+	auth bool
 }
 
 var (
 	errUnauthorized = errors.New("403 Forbidden")
 )
 
-func setReturn(ctx context.Context, i int, err error) {
+func getReturn(ctx context.Context) (ret *handlerReturn) {
 	v := ctx.Value(handlerReturnKey{})
-	ret, ok := v.(*handlerReturn)
-	if !ok {
+	ret, _ = v.(*handlerReturn)
+	return
+}
+
+func setReturn(ctx context.Context, ret handlerReturn) {
+	r := getReturn(ctx)
+	if r == nil {
 		return
 	}
-	ret.i, ret.err = i, err
+	r.i, r.err, r.auth = ret.i, ret.err, ret.auth
 }
 
 type handler struct {
@@ -44,7 +50,7 @@ func NewHandler(next httpserver.Handler, drts []*Directive) *handler {
 func (h *handler) initRouter() {
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		i, err := h.next.ServeHTTP(w, r)
-		setReturn(r.Context(), i, err)
+		setReturn(r.Context(), handlerReturn{i, err, true})
 	})
 	router := chi.NewRouter()
 	router.NotFound(http.HandlerFunc(next))

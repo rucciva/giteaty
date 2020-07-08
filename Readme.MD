@@ -1,8 +1,9 @@
 # Gitea Identity
 
-Expose gitea users' authentication through:
+Expose gitea users' identity through:
 
 - [x] LDAP
+- [x] [Caddy Plugin](https://caddyserver.com/v1/)
 - [ ] OpenID Connect (with [ORY Hydra](https://github.com/ory/hydra))
 
 ## Development

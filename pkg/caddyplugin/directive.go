@@ -56,6 +56,21 @@ func NewDirectives(c *caddy.Controller) (drts []*Directive, err error) {
 	return
 }
 
+func (drt *Directive) needLogin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r)
+
+		ret := getReturn(r.Context())
+		if ret == nil || ret.auth {
+			return
+		}
+
+		// just ask password so that basic auth form always be displayed
+		ret.i = 401
+		w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+	})
+}
+
 func (drt *Directive) handler(next http.Handler) http.Handler {
 	var m func(http.Handler) http.Handler
 
@@ -78,13 +93,13 @@ func (drt *Directive) handler(next http.Handler) http.Handler {
 		m = drt.assertRepoMiddleware
 	case authzDeny:
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			setReturn(r.Context(), 403, errUnauthorized)
+			setReturn(r.Context(), handlerReturn{403, errUnauthorized, true})
 		})
 	}
 	if drt.setBasicAuth != nil && !userAsserted {
-		return m(drt.assertUserMiddleware(next))
+		return drt.needLogin(m(drt.assertUserMiddleware(next)))
 	}
-	return m(next)
+	return drt.needLogin(m(next))
 }
 
 func parseDirectives(c *caddy.Controller) (drts []*Directive, err error) {
@@ -234,7 +249,7 @@ func parseOrgSubBlock(c *caddy.Controller, drt *Directive) (err error) {
 		switch v := c.Val(); v {
 		case "teams":
 			for _, arg := range c.RemainingArgs() {
-				drt.org.teams[arg] = true
+				drt.org.teams[strings.ToLower(arg)] = true
 			}
 		default:
 			return fmt.Errorf("unknwon keyword '%s' in 'org' block", v)

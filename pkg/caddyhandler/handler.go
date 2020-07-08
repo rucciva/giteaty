@@ -1,4 +1,4 @@
-package caddyplugin
+package caddyhandler
 
 import (
 	"context"

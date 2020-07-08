@@ -43,7 +43,7 @@ func (rt roundtripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	return rt.RoundTripper.RoundTrip(req)
 }
 
-func (drt *directive) newGiteaClient(req *http.Request) *gitea.Client {
+func (drt *Directive) newGiteaClient(req *http.Request) *gitea.Client {
 	rt := roundtripper{RoundTripper: http.DefaultTransport, caddyReq: req}
 	if drt.insecure {
 		rt.RoundTripper = &http.Transport{

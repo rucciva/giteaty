@@ -12,13 +12,13 @@ import (
 func TestParseDirectives(t *testing.T) {
 	data := []struct {
 		input      string
-		directives []*directive
+		directives []*Directive
 	}{
 		{
 			input: `
 			giteaty https://gitea.io/
 			`,
-			directives: []*directive{
+			directives: []*Directive{
 				{
 					giteaURL: "https://gitea.io",
 					paths:    []string{"/"},
@@ -48,7 +48,7 @@ func TestParseDirectives(t *testing.T) {
 				org {user}
 			}
 			`,
-			directives: []*directive{
+			directives: []*Directive{
 				{
 					giteaURL: "https://gitea.io",
 					paths:    []string{"/"},

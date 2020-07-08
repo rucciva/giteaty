@@ -30,12 +30,12 @@ func setReturn(ctx context.Context, i int, err error) {
 
 type handler struct {
 	next       httpserver.Handler
-	directives []*directive
+	directives []*Directive
 
 	router http.Handler
 }
 
-func newHandler(next httpserver.Handler, drts []*directive) *handler {
+func NewHandler(next httpserver.Handler, drts []*Directive) *handler {
 	h := &handler{next: next, directives: drts}
 	h.initRouter()
 	return h

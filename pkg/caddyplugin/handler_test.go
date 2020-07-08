@@ -59,7 +59,7 @@ func tNewHandler(t *testing.T, conf string, ress []testResponse) (h *testHandler
 
 	i := insertURL(t, conf, s.URL)
 	c := caddy.NewTestController("http", i)
-	require.NoError(t, setup(c), i)
+	require.NoError(t, Setup(c), i)
 
 	next := httpserver.HandlerFunc(func(w http.ResponseWriter, r *http.Request) (i int, err error) {
 		h.reqFwd = r

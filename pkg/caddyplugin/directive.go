@@ -31,7 +31,7 @@ var authzs = map[authz]bool{
 	authzDeny:       true,
 }
 
-type directive struct {
+type Directive struct {
 	giteaURL string
 	insecure bool
 
@@ -45,7 +45,18 @@ type directive struct {
 	org   *orgConfig
 }
 
-func (drt *directive) handler(next http.Handler) http.Handler {
+func NewDirectives(c *caddy.Controller) (drts []*Directive, err error) {
+	drts, err = parseDirectives(c)
+	if err != nil {
+		return
+	}
+	if err = validateDirectives(drts); err != nil {
+		return
+	}
+	return
+}
+
+func (drt *Directive) handler(next http.Handler) http.Handler {
 	var m func(http.Handler) http.Handler
 
 	userAsserted := false
@@ -76,9 +87,9 @@ func (drt *directive) handler(next http.Handler) http.Handler {
 	return m(next)
 }
 
-func parseDirectives(c *caddy.Controller) (drts []*directive, err error) {
+func parseDirectives(c *caddy.Controller) (drts []*Directive, err error) {
 	for c.Next() {
-		drt := &directive{
+		drt := &Directive{
 			authz: authzNone,
 		}
 
@@ -101,7 +112,7 @@ func parseDirectives(c *caddy.Controller) (drts []*directive, err error) {
 	return drts, nil
 }
 
-func parseBlock(c *caddy.Controller, drt *directive) (err error) {
+func parseBlock(c *caddy.Controller, drt *Directive) (err error) {
 	azIsSet, prevSection := false, ""
 	for c.NextBlock() {
 		v := c.Val()
@@ -216,7 +227,7 @@ func parsePathParameterName(s string) (p string, static bool) {
 	return s, true
 }
 
-func parseOrgSubBlock(c *caddy.Controller, drt *directive) (err error) {
+func parseOrgSubBlock(c *caddy.Controller, drt *Directive) (err error) {
 	delete(drt.org.teams, "owners")
 
 	for next := c.Next(); next && c.Val() != "}"; next = c.Next() {
@@ -236,7 +247,7 @@ func parseOrgSubBlock(c *caddy.Controller, drt *directive) (err error) {
 	return
 }
 
-func validateDirectives(drts []*directive) (err error) {
+func validateDirectives(drts []*Directive) (err error) {
 	defer func() {
 		if err1 := recover(); err1 != nil && err != nil {
 			err = fmt.Errorf("invalid configuration: %s", err1)
@@ -254,6 +265,6 @@ func validateDirectives(drts []*directive) (err error) {
 			}
 		}
 	}
-	newHandler(nil, drts)
+	NewHandler(nil, drts)
 	return
 }

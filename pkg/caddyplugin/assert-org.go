@@ -14,7 +14,7 @@ type orgConfig struct {
 	teams      map[string]bool
 }
 
-func (drt *directive) assertOrgTeam(req *http.Request, orgname string) (err error) {
+func (drt *Directive) assertOrgTeam(req *http.Request, orgname string) (err error) {
 	gcl := drt.newGiteaClient(req)
 	teams, err := gcl.ListMyTeams(&gitea.ListTeamsOptions{})
 	if err != nil {
@@ -30,7 +30,7 @@ func (drt *directive) assertOrgTeam(req *http.Request, orgname string) (err erro
 	return errUnauthorized
 }
 
-func (drt *directive) assertOrgTeamMiddleware(next http.Handler) http.Handler {
+func (drt *Directive) assertOrgTeamMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		name := drt.org.name
 		if !drt.org.nameStatic {

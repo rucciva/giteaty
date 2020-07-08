@@ -14,7 +14,7 @@ type repoConfig struct {
 	name        string
 }
 
-func (drt *directive) assertRepo(req *http.Request, owner string, reponame string) (err error) {
+func (drt *Directive) assertRepo(req *http.Request, owner string, reponame string) (err error) {
 	gcli := drt.newGiteaClient(req)
 	_, err = gcli.GetRepo(owner, reponame)
 	if err != nil {
@@ -28,7 +28,7 @@ func (drt *directive) assertRepo(req *http.Request, owner string, reponame strin
 	return
 }
 
-func (drt *directive) assertRepoMiddleware(next http.Handler) http.Handler {
+func (drt *Directive) assertRepoMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		owner, name := drt.repo.owner, drt.repo.name
 		if !drt.repo.ownerStatic {
@@ -46,7 +46,7 @@ func (drt *directive) assertRepoMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (drt *directive) assertRepoOrOrgMiddleware(next http.Handler) http.Handler {
+func (drt *Directive) assertRepoOrOrgMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		owner, name := drt.repo.owner, drt.repo.name
 		if !drt.repo.ownerStatic {

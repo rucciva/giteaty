@@ -4,7 +4,7 @@ import (
 	"net/http"
 )
 
-func (drt *directive) assertUser(req *http.Request) (err error) {
+func (drt *Directive) assertUser(req *http.Request) (err error) {
 	gcl := drt.newGiteaClient(req)
 	user, err := gcl.GetMyUserInfo()
 	if err != nil {
@@ -20,7 +20,7 @@ func (drt *directive) assertUser(req *http.Request) (err error) {
 	return
 }
 
-func (drt *directive) assertUserMiddleware(next http.Handler) http.Handler {
+func (drt *Directive) assertUserMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		err := drt.assertUser(r)
 		if err != nil {

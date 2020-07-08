@@ -24,7 +24,7 @@ func (drt *Directive) assertUserMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		err := drt.assertUser(r)
 		if err != nil {
-			setReturn(r.Context(), 403, err)
+			setReturn(r.Context(), handlerReturn{403, err, false})
 			return
 		}
 		next.ServeHTTP(w, r)

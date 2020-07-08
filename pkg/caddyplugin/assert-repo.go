@@ -39,7 +39,7 @@ func (drt *Directive) assertRepoMiddleware(next http.Handler) http.Handler {
 		}
 		err := drt.assertRepo(r, owner, name)
 		if err != nil {
-			setReturn(r.Context(), 403, err)
+			setReturn(r.Context(), handlerReturn{403, err, false})
 			return
 		}
 		next.ServeHTTP(w, r)

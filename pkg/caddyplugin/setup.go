@@ -6,7 +6,7 @@ import (
 )
 
 func init() {
-	caddy.RegisterPlugin("gitea-auth", caddy.Plugin{
+	caddy.RegisterPlugin("giteaty", caddy.Plugin{
 		ServerType: "http",
 		Action:     setup,
 	})

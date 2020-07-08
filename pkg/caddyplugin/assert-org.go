@@ -9,9 +9,9 @@ import (
 )
 
 type orgConfig struct {
-	static bool
-	path   string
-	teams  map[string]bool
+	nameStatic bool
+	name       string
+	teams      map[string]bool
 }
 
 func (drt *directive) assertOrgTeam(req *http.Request, orgname string) (err error) {
@@ -32,18 +32,11 @@ func (drt *directive) assertOrgTeam(req *http.Request, orgname string) (err erro
 
 func (drt *directive) assertOrgTeamMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		err := drt.assertOrgTeam(r, chi.URLParam(r, "org"))
-		if err != nil {
-			setReturn(r.Context(), 403, err)
-			return
+		name := drt.org.name
+		if !drt.org.nameStatic {
+			name = chi.URLParam(r, name)
 		}
-		next.ServeHTTP(w, r)
-	})
-}
-
-func (drt *directive) assertStaticOrgTeamMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		err := drt.assertOrgTeam(r, drt.org.path)
+		err := drt.assertOrgTeam(r, name)
 		if err != nil {
 			setReturn(r.Context(), 403, err)
 			return

@@ -2,57 +2,115 @@ package caddyplugin
 
 import (
 	"fmt"
+	"net/http"
 	"net/url"
 	"strings"
 
 	"github.com/caddyserver/caddy"
 )
 
-type directive struct {
-	giteaURL           string
-	giteaAllowInsecure bool
+type authz string
 
-	basePath     string
+const (
+	authzNone       authz = "none"
+	authzUsers      authz = "users"
+	authzRepo       authz = "repo"
+	authzOrg        authz = "org"
+	authzRepoOrOrg  authz = "repoOrOrg"
+	authzRepoAndOrg authz = "repoAndOrg"
+	authzDeny       authz = "deny"
+)
+
+var authzs = map[authz]bool{
+	authzNone:       true,
+	authzUsers:      true,
+	authzRepo:       true,
+	authzOrg:        true,
+	authzRepoOrOrg:  true,
+	authzRepoAndOrg: true,
+	authzDeny:       true,
+}
+
+type directive struct {
+	giteaURL string
+	insecure bool
+
+	paths        []string
+	methods      []string
 	setBasicAuth *string
-	repo         *repoConfig
-	org          *orgConfig
+
+	authz authz
+	users map[string]bool
+	repo  *repoConfig
+	org   *orgConfig
+}
+
+func (drt *directive) handler(next http.Handler) http.Handler {
+	var m func(http.Handler) http.Handler
+
+	userAsserted := false
+	switch drt.authz {
+	case authzNone:
+		m = drt.assertUserMiddleware
+		userAsserted = true
+	case authzUsers:
+		m = drt.assertUserMiddleware
+		userAsserted = true
+	case authzRepo:
+		m = drt.assertRepoMiddleware
+	case authzOrg:
+		m = drt.assertOrgTeamMiddleware
+	case authzRepoOrOrg:
+		m = drt.assertRepoOrOrgMiddleware
+	case authzRepoAndOrg:
+		next = drt.assertOrgTeamMiddleware(next)
+		m = drt.assertRepoMiddleware
+	case authzDeny:
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			setReturn(r.Context(), 403, errUnauthorized)
+		})
+	}
+	if drt.setBasicAuth != nil && !userAsserted {
+		return m(drt.assertUserMiddleware(next))
+	}
+	return m(next)
 }
 
 func parseDirectives(c *caddy.Controller) (drts []*directive, err error) {
 	for c.Next() {
-		cfg := new(directive)
-
-		var u string
-		switch args := c.RemainingArgs(); len(args) {
-		case 1:
-			cfg.basePath, u = "/", args[0]
-		case 2:
-			cfg.basePath, u = args[0], args[1]
-		default:
-			return nil, fmt.Errorf("gitea base url is required")
+		drt := &directive{
+			authz: authzNone,
 		}
-		gurl, err := url.Parse(u)
+
+		args := c.RemainingArgs()
+		if len(args) != 1 {
+			return nil, fmt.Errorf("can only have 1 gitea base url defined")
+		}
+		gurl, err := url.Parse(args[0])
 		if err != nil {
 			return nil, fmt.Errorf("invalid url %s: %v", c.Val(), err)
 		}
-		cfg.giteaURL = gurl.Scheme + "://" + gurl.Host
+		drt.giteaURL = gurl.Scheme + "://" + gurl.Host
 
-		if err = parseBlock(c, cfg); err != nil {
+		if err = parseBlock(c, drt); err != nil {
 			return nil, err
 		}
-		drts = append(drts, cfg)
+		drts = append(drts, drt)
 	}
 
 	return drts, nil
 }
 
 func parseBlock(c *caddy.Controller, drt *directive) (err error) {
-	prevSection := ""
+	azIsSet, prevSection := false, ""
 	for c.NextBlock() {
 		v := c.Val()
 		switch v {
-		case "allowInsecure":
-			drt.giteaAllowInsecure = true
+		case "insecure":
+			if drt.insecure {
+				return fmt.Errorf("can only have one 'insecure' section")
+			}
+			drt.insecure = true
 
 		case "setBasicAuth":
 			if drt.setBasicAuth != nil {
@@ -64,65 +122,73 @@ func parseBlock(c *caddy.Controller, drt *directive) (err error) {
 			}
 			drt.setBasicAuth = &args[0]
 
+		case "paths":
+			drt.paths = append(drt.paths, c.RemainingArgs()...)
+
+		case "methods":
+			for _, arg := range c.RemainingArgs() {
+				drt.methods = append(drt.methods, strings.ToUpper(arg))
+			}
+
+		case "users":
+			if drt.users == nil {
+				drt.users = make(map[string]bool)
+			}
+			for _, arg := range c.RemainingArgs() {
+				drt.users[arg] = true
+			}
+
+		case "authz":
+			if azIsSet {
+				return fmt.Errorf("can only have one 'authz' section")
+			}
+			args := c.RemainingArgs()
+			if len(args) != 1 {
+				return fmt.Errorf("'authz' takes exactly 1 arg")
+			}
+			if !authzs[authz(args[0])] {
+				return fmt.Errorf("unknown 'authz' %s", args[0])
+			}
+			drt.authz = authz(args[0])
+			azIsSet = true
+
 		case "repo":
 			if drt.repo != nil {
 				return fmt.Errorf("can only have one 'repo' section")
 			}
 			drt.repo = &repoConfig{
-				path: "/{owner}/{repo}",
+				owner: "owner",
+				name:  "repo",
 			}
 			args := c.RemainingArgs()
-			if len(args) > 1 {
-				return fmt.Errorf("repo only takes max 1 args")
+			if len(args) > 2 || len(args) == 1 {
+				return fmt.Errorf("repo can only takes exactly 2 args or none")
 			}
-
 			if len(args) == 0 {
 				break
 			}
-
-			if !strings.HasPrefix(args[0], "/") && strings.Count(args[0], "/") == 1 {
-				drt.repo.static = true
-				drt.repo.path = args[0]
-				break
-			}
-
-			if strings.Count(args[0], "{owner}") != 1 || strings.Count(args[0], "{repo}") != 1 {
-				return fmt.Errorf("path should have 1 '{owner}' and 1 '{repo}' element")
-			}
-			drt.repo.path = args[0]
+			drt.repo.owner, drt.repo.ownerStatic = parsePathParameterName(args[0])
+			drt.repo.name, drt.repo.nameStatic = parsePathParameterName(args[1])
 
 		case "org":
 			if drt.org != nil {
 				return fmt.Errorf("can only have one 'org' section")
 			}
 			drt.org = &orgConfig{
-				path:  "/{org}",
+				name:  "org",
 				teams: map[string]bool{"owners": true},
 			}
 			args := c.RemainingArgs()
 			if len(args) > 1 {
 				return fmt.Errorf("org only takes max 1 args")
 			}
-
 			if len(args) == 0 {
 				break
 			}
-
-			if !strings.HasPrefix(args[0], "/") && strings.Count(args[0], "/") == 0 {
-				drt.org.static = true
-				drt.org.path = args[0]
-				break
-			}
-
-			if strings.Count(args[0], "{org}") != 1 {
-				return fmt.Errorf("path should have 1 '{org}' element")
-			}
-			drt.org.path = args[0]
+			drt.org.name, drt.org.nameStatic = parsePathParameterName(args[0])
 
 		case "{":
 			switch prevSection {
-			case "repo":
-				err = parseRepoSubBlock(c, drt)
 			case "org":
 				err = parseOrgSubBlock(c, drt)
 			default:
@@ -137,22 +203,17 @@ func parseBlock(c *caddy.Controller, drt *directive) (err error) {
 		}
 		prevSection = v
 	}
+	if len(drt.paths) == 0 {
+		drt.paths = append(drt.paths, "/")
+	}
 	return
 }
 
-func parseRepoSubBlock(c *caddy.Controller, drt *directive) (err error) {
-	for next := c.Next(); next && c.Val() != "}"; next = c.Next() {
-		switch v := c.Val(); v {
-		case "orgFailover":
-			drt.repo.orgFailover = true
-		case "matchPermission":
-			drt.repo.matchPermission = true
-		default:
-			return fmt.Errorf("unknwon keyword '%s' in organization block", v)
-		}
+func parsePathParameterName(s string) (p string, static bool) {
+	if strings.HasPrefix(s, "{") && strings.HasSuffix(s, "}") {
+		return s[1 : len(s)-1], false
 	}
-
-	return
+	return s, true
 }
 
 func parseOrgSubBlock(c *caddy.Controller, drt *directive) (err error) {
@@ -165,7 +226,7 @@ func parseOrgSubBlock(c *caddy.Controller, drt *directive) (err error) {
 				drt.org.teams[arg] = true
 			}
 		default:
-			return fmt.Errorf("unknwon keyword '%s' in organization block", v)
+			return fmt.Errorf("unknwon keyword '%s' in 'org' block", v)
 		}
 	}
 
@@ -181,6 +242,18 @@ func validateDirectives(drts []*directive) (err error) {
 			err = fmt.Errorf("invalid configuration: %s", err1)
 		}
 	}()
+	for _, drt := range drts {
+		if drt.authz == authzRepo || drt.authz == authzRepoAndOrg || drt.authz == authzRepoOrOrg {
+			if drt.repo == nil {
+				return fmt.Errorf("`%s` require `repo` section", drt.authz)
+			}
+		}
+		if drt.authz == authzOrg || drt.authz == authzRepoAndOrg || drt.authz == authzRepoOrOrg {
+			if drt.org == nil {
+				return fmt.Errorf("`%s` require `org` section", drt.authz)
+			}
+		}
+	}
 	newHandler(nil, drts)
 	return
 }

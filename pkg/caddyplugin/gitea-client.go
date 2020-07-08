@@ -3,6 +3,7 @@ package caddyplugin
 import (
 	"crypto/tls"
 	"net/http"
+	"strings"
 
 	"code.gitea.io/sdk/gitea"
 )
@@ -22,6 +23,13 @@ func (rt roundtripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	if v, ok := rt.caddyReq.Header[http.CanonicalHeaderKey("Authorization")]; ok {
 		req.Header[http.CanonicalHeaderKey("Authorization")] = append([]string(nil), v...)
 	}
+	if u, p, ok := rt.caddyReq.BasicAuth(); ok {
+		// otp workaround
+		if s := strings.Split(u, ";"); len(s) == 2 {
+			req.SetBasicAuth(s[0], p)
+			req.Header[http.CanonicalHeaderKey("X-Gitea-OTP")] = []string{s[1]}
+		}
+	}
 	if v, ok := rt.caddyReq.Header[http.CanonicalHeaderKey("X-Gitea-OTP")]; ok {
 		req.Header[http.CanonicalHeaderKey("X-Gitea-OTP")] = append([]string(nil), v...)
 	}
@@ -37,7 +45,7 @@ func (rt roundtripper) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func (drt *directive) newGiteaClient(req *http.Request) *gitea.Client {
 	rt := roundtripper{RoundTripper: http.DefaultTransport, caddyReq: req}
-	if drt.giteaAllowInsecure {
+	if drt.insecure {
 		rt.RoundTripper = &http.Transport{
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
 	}

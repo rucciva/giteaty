@@ -2,6 +2,7 @@ package caddyplugin
 
 import (
 	"fmt"
+	"net/http"
 	"testing"
 
 	"github.com/caddyserver/caddy"
@@ -15,344 +16,63 @@ func TestParseDirectives(t *testing.T) {
 	}{
 		{
 			input: `
-				gitea-auth https://gitea.io
-				gitea-auth /test https://gitea.io
+			giteaty https://gitea.io/
 			`,
 			directives: []*directive{
 				{
 					giteaURL: "https://gitea.io",
-					basePath: "/",
-				},
-				{
-					giteaURL: "https://gitea.io",
-					basePath: "/test",
+					paths:    []string{"/"},
+					authz:    authzNone,
 				},
 			},
 		},
-
-		{
-			input: `gitea-auth /test https://gitea.io`,
-			directives: []*directive{
-				{
-					giteaURL: "https://gitea.io",
-					basePath: "/test",
-				},
-			},
-		},
-
 		{
 			input: `
-			gitea-auth /test https://gitea.io {
-				repo
+			giteaty https://gitea.io/
+			giteaty https://gitea.io/ {
+				insecure
+				paths /test1 /test2
+				methods gEt pOsT
+				authz users
+				
+				users a b c
+			}
+			giteaty https://gitea.io/ {
+				paths /test3/{user} /test4/{user}
+				paths /test5/{user}/*
+				methods gEt pOsT
+				methods PUT patch
+				authz repoAndOrg
+
+				repo {user} test 
+				org {user}
 			}
 			`,
 			directives: []*directive{
 				{
 					giteaURL: "https://gitea.io",
-					basePath: "/test",
-					repo: &repoConfig{
-						path: "/{owner}/{repo}",
-					},
+					paths:    []string{"/"},
+					authz:    authzNone,
 				},
-			},
-		},
-
-		{
-			input: `
-			gitea-auth /test https://gitea.io {
-				repo /{owner}/{repo}
-			}
-			`,
-			directives: []*directive{
 				{
 					giteaURL: "https://gitea.io",
-					basePath: "/test",
-					repo: &repoConfig{
-						path: "/{owner}/{repo}",
-					},
+					insecure: true,
+					paths:    []string{"/test1", "/test2"},
+					methods:  []string{http.MethodGet, http.MethodPost},
+					authz:    authzUsers,
+					users:    map[string]bool{"a": true, "b": true, "c": true},
 				},
-			},
-		},
-
-		{
-			input: `
-			gitea-auth /test https://gitea.io {
-				repo rucciva/test
-			}
-			`,
-			directives: []*directive{
 				{
 					giteaURL: "https://gitea.io",
-					basePath: "/test",
+					paths:    []string{"/test3/{user}", "/test4/{user}", "/test5/{user}/*"},
+					methods:  []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch},
+					authz:    authzRepoAndOrg,
 					repo: &repoConfig{
-						static: true,
-						path:   "rucciva/test",
-					},
-				},
-			},
-		},
-
-		{
-			input: `
-			gitea-auth /test https://gitea.io {
-				repo /{owner}/{repo} {
-					orgFailover	
-				}
-			}
-			`,
-			directives: []*directive{
-				{
-					giteaURL: "https://gitea.io",
-					basePath: "/test",
-					repo: &repoConfig{
-						path:        "/{owner}/{repo}",
-						orgFailover: true,
-					},
-				},
-			},
-		},
-
-		{
-			input: `
-			gitea-auth /test https://gitea.io {
-				repo rucciva/test {
-					orgFailover	
-					matchPermission
-				}
-			}
-			`,
-			directives: []*directive{
-				{
-					giteaURL: "https://gitea.io",
-					basePath: "/test",
-					repo: &repoConfig{
-						static:          true,
-						path:            "rucciva/test",
-						orgFailover:     true,
-						matchPermission: true,
-					},
-				},
-			},
-		},
-
-		{
-			input: `
-			gitea-auth /test  https://gitea.io/ {
-				org 
-			}`,
-			directives: []*directive{
-				{
-					giteaURL: "https://gitea.io",
-
-					basePath: "/test",
-					org: &orgConfig{
-						path: "/{org}",
-						teams: map[string]bool{
-							"owners": true,
-						},
-					},
-				},
-			},
-		},
-
-		{
-			input: `
-			gitea-auth /test  https://gitea.io/ {
-				org /my/{org}.js
-			}`,
-			directives: []*directive{
-				{
-					giteaURL: "https://gitea.io",
-
-					basePath: "/test",
-					org: &orgConfig{
-						path: "/my/{org}.js",
-						teams: map[string]bool{
-							"owners": true,
-						},
-					},
-				},
-			},
-		},
-
-		{
-			input: `
-			gitea-auth /test https://gitea.io {
-				org rucciva
-			}
-			`,
-			directives: []*directive{
-				{
-					giteaURL: "https://gitea.io",
-					basePath: "/test",
-					org: &orgConfig{
-						static: true,
-						path:   "rucciva",
-						teams: map[string]bool{
-							"owners": true,
-						},
-					},
-				},
-			},
-		},
-
-		{
-			input: `
-			gitea-auth /test  https://gitea.io/ {
-				org /my/{org}.js {
-					teams tester developer
-				}
-			}`,
-			directives: []*directive{
-				{
-					giteaURL: "https://gitea.io",
-
-					basePath: "/test",
-					org: &orgConfig{
-						path: "/my/{org}.js",
-						teams: map[string]bool{
-							"tester":    true,
-							"developer": true,
-						},
-					},
-				},
-			},
-		},
-		{
-			input: `
-			gitea-auth /test  https://gitea.io/ {
-				allowInsecure
-
-				repo /re/{owner}/{repo}.js {
-					orgFailover
-					matchPermission
-				}
-				org /my/{org}.js {
-					teams tester developer
-				}
-			}`,
-			directives: []*directive{
-				{
-					giteaURL:           "https://gitea.io",
-					giteaAllowInsecure: true,
-
-					basePath: "/test",
-					repo: &repoConfig{
-						path:            "/re/{owner}/{repo}.js",
-						matchPermission: true,
-						orgFailover:     true,
+						owner: "user", name: "test", nameStatic: true,
 					},
 					org: &orgConfig{
-						path: "/my/{org}.js",
-						teams: map[string]bool{
-							"tester":    true,
-							"developer": true,
-						},
-					},
-				},
-			},
-		},
-		{
-			input: `
-			gitea-auth /test  https://gitea.io/ {
-				allowInsecure
-
-				setBasicAuth somepassword
-				repo rucciva/repo {
-					orgFailover
-					matchPermission
-				}
-				org myorg {
-					teams tester developer
-				}
-			}`,
-			directives: []*directive{
-				{
-					giteaURL:           "https://gitea.io",
-					giteaAllowInsecure: true,
-					setBasicAuth:       func(s string) *string { return &s }("somepassword"),
-					basePath:           "/test",
-					repo: &repoConfig{
-						static:          true,
-						path:            "rucciva/repo",
-						matchPermission: true,
-						orgFailover:     true,
-					},
-					org: &orgConfig{
-						static: true,
-						path:   "myorg",
-						teams: map[string]bool{
-							"tester":    true,
-							"developer": true,
-						},
-					},
-				},
-			},
-		},
-		{
-			input: `
-			gitea-auth /test  https://gitea.io/ {
-				allowInsecure
-
-				setBasicAuth somepassword
-				repo rucciva/repo {
-					orgFailover
-					matchPermission
-				}
-				org myorg {
-					teams tester developer
-				}
-			}
-			gitea-auth /dev  https://gitea.io/ {
-				allowInsecure
-
-				setBasicAuth anotherpassword
-				repo /{owner}/{repo} {
-					orgFailover
-					matchPermission
-				}
-				org /{org} {
-					teams tester developer
-				}
-			}
-			`,
-			directives: []*directive{
-				{
-					giteaURL:           "https://gitea.io",
-					giteaAllowInsecure: true,
-					setBasicAuth:       func(s string) *string { return &s }("somepassword"),
-					basePath:           "/test",
-					repo: &repoConfig{
-						static:          true,
-						path:            "rucciva/repo",
-						matchPermission: true,
-						orgFailover:     true,
-					},
-					org: &orgConfig{
-						static: true,
-						path:   "myorg",
-						teams: map[string]bool{
-							"tester":    true,
-							"developer": true,
-						},
-					},
-				},
-				{
-					giteaURL:           "https://gitea.io",
-					giteaAllowInsecure: true,
-					setBasicAuth:       func(s string) *string { return &s }("anotherpassword"),
-					basePath:           "/dev",
-					repo: &repoConfig{
-						path:            "/{owner}/{repo}",
-						matchPermission: true,
-						orgFailover:     true,
-					},
-					org: &orgConfig{
-						path: "/{org}",
-						teams: map[string]bool{
-							"tester":    true,
-							"developer": true,
-						},
+						name:  "user",
+						teams: map[string]bool{"owners": true},
 					},
 				},
 			},

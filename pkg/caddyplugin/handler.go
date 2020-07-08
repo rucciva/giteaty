@@ -48,41 +48,16 @@ func (h *handler) initRouter() {
 	})
 	router := chi.NewRouter()
 	router.NotFound(http.HandlerFunc(next))
-
 	for _, drt := range h.directives {
-		router.Route(drt.basePath, func(r chi.Router) {
-			if drt.repo == nil && drt.org == nil || drt.setBasicAuth != nil {
-				r.Use(drt.assertUserMiddleware)
+		for _, path := range drt.paths {
+			if len(drt.methods) == 0 {
+				router.Handle(path, drt.handler(next))
+				continue
 			}
-
-			if repo := drt.repo; repo != nil {
-				switch repo.static {
-				case true:
-					r.Use(drt.assertStaticRepoMiddleware)
-				case false:
-					r.Route(repo.path, func(r chi.Router) {
-						r.Use(drt.assertRepoMiddleware)
-						r.Handle("/*", next)
-					})
-
-				}
+			for _, method := range drt.methods {
+				router.Method(method, path, drt.handler(next))
 			}
-
-			if org := drt.org; org != nil {
-				switch org.static {
-				case true:
-					r.Use(drt.assertStaticOrgTeamMiddleware)
-				case false:
-					r.Route(org.path, func(r chi.Router) {
-						r.Use(drt.assertOrgTeamMiddleware)
-						r.Handle("/*", next)
-					})
-
-				}
-			}
-
-			r.Handle("/*", next)
-		})
+		}
 	}
 
 	h.router = router

@@ -10,6 +10,10 @@ func (drt *directive) assertUser(req *http.Request) (err error) {
 	if err != nil {
 		return errUnauthorized
 	}
+	if drt.authz == authzUsers && !drt.users[user.UserName] {
+		return errUnauthorized
+	}
+
 	if drt.setBasicAuth != nil {
 		req.SetBasicAuth(user.UserName, *drt.setBasicAuth)
 	}

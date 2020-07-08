@@ -106,6 +106,7 @@ func (h testHandler) mustNotWriteResponse(t *testing.T, w *httptest.ResponseReco
 }
 
 func (h testHandler) mustForwardReq(t *testing.T, r *http.Request) {
+	require.NotNil(t, h.reqFwd, "should forward request")
 	assert.Equal(t, r.Method, h.reqFwd.Method, "should not modify method")
 	assert.Equal(t, r.URL, h.reqFwd.URL, "should not modify url")
 	assert.Equal(t, r.Header, h.reqFwd.Header, "should not modify url")
@@ -113,6 +114,8 @@ func (h testHandler) mustForwardReq(t *testing.T, r *http.Request) {
 }
 
 func (h testHandler) mustForwardReqWithCustomBasicAuthPass(t *testing.T, r *http.Request, pass string) {
+	require.NotNil(t, h.reqFwd, "should forward request")
+
 	uo, _, _ := r.BasicAuth()
 	u, p, ok := h.reqFwd.BasicAuth()
 	assert.True(t, ok)
@@ -125,8 +128,8 @@ func (h testHandler) mustForwardReqWithCustomBasicAuthPass(t *testing.T, r *http
 }
 
 func (h testHandler) mustRelayNextResponse(t *testing.T, i int, err error) {
-	require.Equal(t, err, nil, "should pass error from next middleware")
-	assert.Equal(t, i, 201, "should pass return code from next middleware")
+	require.Equal(t, nil, err, "should pass error from next middleware")
+	assert.Equal(t, 201, i, "should pass return code from next middleware")
 }
 
 func (h testHandler) mustNotForwardRequest(t *testing.T, i int, err error) {
@@ -135,12 +138,13 @@ func (h testHandler) mustNotForwardRequest(t *testing.T, i int, err error) {
 	assert.Nil(t, h.reqFwd)
 }
 
-func TestHandlerPassthrough(t *testing.T) {
+func TestHandlerPassthroughOrDeny(t *testing.T) {
 	conf := `
-		gitea-auth /test {{.URL}}
-		gitea-auth /dev {{.URL}}
+		giteaty {{.URL}} {
+			paths  /test /test/* /dev /dev/*
+			authz deny
+		}
 	`
-	ress := []testResponse{}
 
 	paths := []string{
 		"/",
@@ -151,12 +155,11 @@ func TestHandlerPassthrough(t *testing.T) {
 		"/developer/something",
 		"/developer/something/else",
 	}
-
 	for _, p := range paths {
-		t.Run(p, func(t *testing.T) {
+		t.Run("Passthrough"+p, func(t *testing.T) {
 			w := &httptest.ResponseRecorder{}
 			r := httptest.NewRequest(http.MethodGet, p, strings.NewReader(`{"message" : "hi"}`))
-			h := tNewHandler(t, conf, ress)
+			h := tNewHandler(t, conf, nil)
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
 			h.mustRelayNextResponse(t, i, err)
 			h.mustNotWriteResponse(t, w)
@@ -164,12 +167,34 @@ func TestHandlerPassthrough(t *testing.T) {
 			require.Len(t, h.reqGitea, 0, "should not call gitea API")
 		})
 	}
+
+	paths = []string{
+		"/dev",
+		"/test",
+		"/dev/something",
+		"/test/something",
+	}
+	for _, p := range paths {
+		t.Run("Deny"+p, func(t *testing.T) {
+			w := &httptest.ResponseRecorder{}
+			r := httptest.NewRequest(http.MethodGet, p, strings.NewReader(`{"message" : "hi"}`))
+			h := tNewHandler(t, conf, nil)
+			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
+			h.mustNotForwardRequest(t, i, err)
+			h.mustNotWriteResponse(t, w)
+			require.Len(t, h.reqGitea, 0, "should not call gitea API")
+		})
+	}
 }
 
 func TestHandlerAssertUser(t *testing.T) {
 	conf := `
-	gitea-auth /test {{.URL}}
-	gitea-auth /dev {{.URL}}
+	giteaty {{.URL}} {
+		paths /test /test/*
+	}
+	giteaty {{.URL}} {
+		paths /dev /dev/*
+	}
 	`
 
 	paths := []string{
@@ -181,7 +206,7 @@ func TestHandlerAssertUser(t *testing.T) {
 		"/dev/something/else",
 	}
 	for _, p := range paths {
-		t.Run("Success#"+p, func(t *testing.T) {
+		t.Run("Success"+p, func(t *testing.T) {
 			user, pass := "user", "pass"
 			ress := []testResponse{
 				{200, nil, &gitea.User{UserName: user}},
@@ -203,7 +228,7 @@ func TestHandlerAssertUser(t *testing.T) {
 	}
 
 	for _, p := range paths {
-		t.Run("Unauthorized#"+p, func(t *testing.T) {
+		t.Run("Unauthorized"+p, func(t *testing.T) {
 			user, pass := "user", "pass"
 			ress := []testResponse{
 				{401, nil, map[string]interface{}{"message": "Unauthorized"}},
@@ -222,20 +247,91 @@ func TestHandlerAssertUser(t *testing.T) {
 			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
 		})
 	}
+}
 
+func TestAssertUsers(t *testing.T) {
+	conf := `
+		giteaty {{.URL}} {
+			paths /dev/*
+			authz users
+
+			users user user1
+		}
+	`
+
+	paths := []string{
+		"/dev/test/name",
+		"/dev/sya",
+	}
+	for _, p := range paths {
+		t.Run("Success"+p, func(t *testing.T) {
+			user, pass := "user", "pass"
+			ress := []testResponse{
+				{200, nil, &gitea.User{UserName: user}},
+			}
+
+			w := &httptest.ResponseRecorder{}
+			r := httptest.NewRequest(http.MethodGet, p, strings.NewReader(`{"message" : "hi"}`))
+			r.SetBasicAuth(user, pass)
+			h := tNewHandler(t, conf, ress)
+			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
+
+			h.mustRelayNextResponse(t, i, err)
+			h.mustNotWriteResponse(t, w)
+			h.mustForwardReq(t, r)
+			require.Len(t, h.reqGitea, 1, "should call gitea API exactly once")
+			h.mustAssertUser(t, h.reqGitea[0])
+			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
+		})
+	}
+
+	for _, p := range paths {
+		t.Run("Unauthorized"+p, func(t *testing.T) {
+			user, pass := "user2", "pass"
+			ress := []testResponse{
+				{200, nil, &gitea.User{UserName: user}},
+			}
+
+			w := &httptest.ResponseRecorder{}
+			r := httptest.NewRequest(http.MethodGet, p, strings.NewReader(`{"message" : "hi"}`))
+			r.SetBasicAuth(user, pass)
+			h := tNewHandler(t, conf, ress)
+			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
+
+			h.mustNotForwardRequest(t, i, err)
+			h.mustNotWriteResponse(t, w)
+			require.Len(t, h.reqGitea, 1, "should call gitea API exactly once")
+			h.mustAssertUser(t, h.reqGitea[0])
+			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
+		})
+	}
 }
 
 func TestHandlerAssertRepo(t *testing.T) {
 	conf := `
-		gitea-auth /dev {{.URL}} {
-			repo
+		giteaty {{.URL}} {
+			paths /dev/{owner}/{repo}
+			paths /dev/{owner}/{repo}/*
+			authz repo
+			
+			repo 
 		}
-		gitea-auth /test {{.URL}} {
-			repo /something/{owner}/{else}/{repo}.js
+
+		giteaty {{.URL}} {
+			paths /test/{something}/{owner1}/{else}/{repo1}.js
+			paths /test/{something}/{owner1}/{else}/{repo1}.js/*
+			authz repo
+
+			repo {owner1} repo1
 		}
-		gitea-auth /qa {{.URL}} {
-			repo sowner/srepo
+
+		giteaty {{.URL}} {
+			paths /qa /qa/*
+			
+			authz repo
+			repo sowner srepo
 		}
+		
 	`
 
 	data := []struct {
@@ -247,10 +343,10 @@ func TestHandlerAssertRepo(t *testing.T) {
 		{"/dev/theowner1/therepo1", "theowner1", "therepo1"},
 		{"/dev/theowner1/therepo1/lala/lala", "theowner1", "therepo1"},
 
-		{"/test/something/theowner/else/therepo.js", "theowner", "therepo"},
-		{"/test/something/theowner/else1/therepo.js", "theowner", "therepo"},
-		{"/test/something/theowner/else2/therepo.js", "theowner", "therepo"},
-		{"/test/something/theowner/else2/therepo.js/lala/lala", "theowner", "therepo"},
+		{"/test/something/theowner/else/therepo.js", "theowner", "repo1"},
+		{"/test/something/theowner/else1/therepo.js", "theowner", "repo1"},
+		{"/test/something/theowner/else2/therepo.js", "theowner", "repo1"},
+		{"/test/something/theowner/else2/therepo.js/lala/lala", "theowner", "repo1"},
 
 		{"/qa", "sowner", "srepo"},
 		{"/qa/lalal/syalala", "sowner", "srepo"},
@@ -329,18 +425,30 @@ func TestHandlerAssertRepo(t *testing.T) {
 
 func TestHandlerAssertOrg(t *testing.T) {
 	conf := `
-		gitea-auth /dev {{.URL}} {
+		giteaty  {{.URL}} {
+			paths /dev/{org}
+			authz org
+
 			org
 		}
-		gitea-auth /test {{.URL}} {
-			org /something/{org}
+		giteaty {{.URL}} {
+			paths /test/something/{org1} /test/something/{org1}/*
+			authz org
+			
+			org {org1}
 		}
-		gitea-auth /ops {{.URL}} {
-			org /something/{org} {
+		giteaty {{.URL}} {
+			paths /ops/something/{org} 
+			authz org
+
+			org {org} {
 				teams dev sec ops
 			}
 		}
-		gitea-auth /qa {{.URL}} {
+		giteaty {{.URL}} {
+			paths /qa /qa/{sya}/{lala}
+			authz org
+
 			org someorg1
 		}
 	`
@@ -353,6 +461,7 @@ func TestHandlerAssertOrg(t *testing.T) {
 		{"/dev/someorg", "someorg", []string{"Owners"}},
 
 		{"/test/something/someorg", "someorg", []string{"Owners"}},
+		{"/test/something/someorg/syalala", "someorg", []string{"Owners"}},
 
 		{"/ops/something/someorg", "someorg", []string{"dev"}},
 		{"/ops/something/someorg", "someorg", []string{"ops"}},
@@ -428,40 +537,48 @@ func TestHandlerAssertOrg(t *testing.T) {
 	}
 }
 
-func TestSetBasicAuth(t *testing.T) {
+func TestHandlerSetBasicAuth(t *testing.T) {
 	conf := `
-		gitea-auth /dev {{.URL}} {
-			setBasicAuth syalala
-			repo /repo/{owner}/{repo}
-			org /org/{org}
+		giteaty  {{.URL}} {
+			paths /*
+			setBasicAuth syala
+			authz repoOrOrg
+
+			repo user name
+			org org
 		}
 	`
 
-	paths := []string{
-		"/dev",
-		"/dev/test",
-		"/dev/ops",
-	}
-	for _, p := range paths {
-		t.Run(p, func(t *testing.T) {
-			user, pass := "user", "pass"
-			ress := []testResponse{
-				{200, nil, &gitea.User{UserName: user}},
-			}
-
-			w := &httptest.ResponseRecorder{}
-			r := httptest.NewRequest(http.MethodGet, p, strings.NewReader(`{"message" : "hi"}`))
-			r.SetBasicAuth(user, pass)
-			h := tNewHandler(t, conf, ress)
-			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
-
-			h.mustRelayNextResponse(t, i, err)
-			h.mustNotWriteResponse(t, w)
-			h.mustForwardReqWithCustomBasicAuthPass(t, r, "syalala")
-			require.Len(t, h.reqGitea, 1, "should call gitea API exactly once")
-			h.mustAssertUser(t, h.reqGitea[0])
-			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
-		})
+	data := []struct {
+		path string
+	}{
+		{path: "/lala"},
+		{path: "/syalala"},
 	}
 
+	for _, d := range data {
+		user, pass := "user", "pass"
+		ress := []testResponse{
+			{404, nil, map[string]interface{}{"message": "not found"}},
+			{200, nil, []*gitea.Team{{Name: "Owners", Organization: &gitea.Organization{UserName: "org"}}}},
+			{200, nil, &gitea.User{UserName: user}},
+		}
+
+		w := &httptest.ResponseRecorder{}
+		r := httptest.NewRequest(http.MethodGet, d.path, strings.NewReader(`{"message" : "hi"}`))
+		r.SetBasicAuth(user, pass)
+		h := tNewHandler(t, conf, ress)
+
+		i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
+		h.mustRelayNextResponse(t, i, err)
+		h.mustNotWriteResponse(t, w)
+		h.mustForwardReqWithCustomBasicAuthPass(t, r, "syala")
+		require.Len(t, h.reqGitea, 3, "should call gitea API trice")
+		h.mustAssertRepo(t, h.reqGitea[0], "user", "name")
+		h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
+		h.mustAssertOrgTeams(t, h.reqGitea[1])
+		h.mustUseBasicAuth(t, h.reqGitea[1], user, pass)
+		h.mustAssertUser(t, h.reqGitea[2])
+		h.mustUseBasicAuth(t, h.reqGitea[2], user, pass)
+	}
 }

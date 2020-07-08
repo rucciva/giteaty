@@ -249,7 +249,7 @@ func parseOrgSubBlock(c *caddy.Controller, drt *Directive) (err error) {
 		switch v := c.Val(); v {
 		case "teams":
 			for _, arg := range c.RemainingArgs() {
-				drt.org.teams[arg] = true
+				drt.org.teams[strings.ToLower(arg)] = true
 			}
 		default:
 			return fmt.Errorf("unknwon keyword '%s' in 'org' block", v)

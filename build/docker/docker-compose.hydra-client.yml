@@ -1,0 +1,58 @@
+version: "2.4"
+services:
+  giteaty:
+    image: rucciva/golang:1.14.2-alpine
+    environment:
+      - GOCACHE=/go/build
+    working_dir: ${PWD}/../../
+    volumes:
+      - ${PWD}/../../:${PWD}/../../
+      - go:/go
+    command: go run github.com/rucciva/giteaty/internal/hydra-test
+
+  client_hydra_client_creator:
+    image: appropriate/curl
+    restart: on-failure
+    depends_on:
+      hydra:
+        condition: service_healthy
+    environment:
+      HYDRA_ADMIN_URL: http://hydra:4445
+      CONTENT_TYPE: "content-type: application/json"
+      BODY: 
+        '{
+            "client_name": "client",
+            "client_id": "client",
+            "client_secret": "client",
+            "scope": "openid profile trusted admin phone email address manage_profile",
+            "grant_types": [ "authorization_code", "refresh_token", "client_credentials", "implicit" ],
+            "response_types": [ "token", "code", "id_token" ],
+            "redirect_uris": [
+                "https://client.local/callback"
+            ],
+            "frontchannel_logout_session_required": true,
+            "frontchannel_logout_uri": "https://client.local/logout"
+        }'
+    entrypoint: /bin/sh -c
+    command: 
+      - curl -X POST -H "$$CONTENT_TYPE" "$$HYDRA_ADMIN_URL/clients" -d "$$BODY" &&
+        curl -X PUT -H "$$CONTENT_TYPE" "$$HYDRA_ADMIN_URL/clients/client" -d "$$BODY"
+
+  client:
+    image: oryd/hydra:v1.4.2-alpine
+    restart: unless-stopped
+    depends_on: 
+      - client_hydra_client_creator
+    command: token user 
+      --skip-tls-verify 
+      --port 8080 
+      --auth-url https://giteaty.local/oauth2/auth 
+      --token-url https://giteaty.local/oauth2/token 
+      --client-id client
+      --client-secret client
+      --scope openid,profile,trusted,admin,phone
+      --redirect https://client.local/callback
+
+  reverse_proxy:
+    depends_on: 
+      - client

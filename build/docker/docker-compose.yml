@@ -27,6 +27,52 @@ services:
       - DB_PASSWD=gitea
       - HTTP_PORT=3000
   
+  mysql_provisioner:
+    image: mysql:5.7
+    restart: on-failure
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      SQL: |-
+        CREATE DATABASE IF NOT EXISTS $HYDRA_DATABASE;
+        GRANT ALL PRIVILEGES ON $HYDRA_DATABASE.* to "$HYDRA_DATABASE_USERNAME"@"%" IDENTIFIED BY "$HYDRA_DATABASE_PASSWORD";
+    entrypoint: /bin/bash -c
+    command:
+      - mysql -u root -p"gitea" -h mysql -e "$$SQL"
+  
+  hydra_migrator:
+    image: oryd/hydra:v1.4.2-alpine
+    restart: on-failure
+    depends_on:
+      - mysql_provisioner
+    environment:
+      - HYDRA_DATABASE
+      - HYDRA_DATABASE_USERNAME
+      - HYDRA_DATABASE_PASSWORD
+      - LOG_LEVEL=debug
+      - DSN=mysql://${HYDRA_DATABASE_USERNAME}:${HYDRA_DATABASE_PASSWORD}@tcp(mysql:3306)/${HYDRA_DATABASE}?parseTime=true&max_conns=20&max_idle_conns=4
+    command:
+      migrate sql -e --yes
+
+  hydra:
+    image: oryd/hydra:v1.4.2-alpine
+    restart: unless-stopped
+    depends_on:
+      - hydra_migrator
+    environment:
+      - LOG_LEVEL=debug
+      - URLS_LOGIN=https://giteaty.local/hydra/login
+      - URLS_CONSENT=https://giteaty.local/hydra/consent
+      - URLS_LOGOUT=https://giteaty.local/hydra/logout
+      - URLS_SELF_ISSUER=https://giteaty.local
+      - URLS_POST_LOGOUT_REDIRECT=https://gitea.local
+      - DSN=mysql://${HYDRA_DATABASE_USERNAME}:${HYDRA_DATABASE_PASSWORD}@tcp(mysql:3306)/${HYDRA_DATABASE}?parseTime=true&max_conns=20&max_idle_conns=4
+      - SECRETS_SYSTEM=alkjdhfaklsdhjfkalsjdhfaksldfjhaskldjfhaslkdfhjas-asdkjlfhasdlkfjhasdlkfhjasdlkfjh
+    command: serve all --dangerous-force-http
+    healthcheck:
+      test: ["CMD", "hydra", "clients", "list", "--endpoint=http://hydra:4445"]
+
   generator:
     image: rucciva/golang:1.14.2-alpine
     environment:
@@ -90,6 +136,48 @@ services:
         condition: service_healthy 
       gitea: 
         condition: service_started
+
+  reverse_proxy:
+    image: rucciva/caddy:1.0.5
+    restart: unless-stopped
+    depends_on: 
+      - giteaty 
+      - hydra
+      - gitea
+    environment:
+      CADDY_CONF: |
+        giteaty.local:80 {
+          proxy / giteaty:8080
+        }
+
+        giteaty.local:443 {
+          tls self_signed
+          
+          proxy / giteaty:8080
+
+          proxy /oauth2 hydra:4444
+          proxy /userinfo hydra:4444
+          proxy /.well-known hydra:4444
+        }
+
+        client.local:443 {
+          tls self_signed 
+          proxy / client:8080
+        }
+
+        gitea.local:443 {
+          tls self_signed 
+          proxy / gitea:3000
+        }
+    entrypoint: /bin/sh -c 
+    command: 
+      - echo "$$CADDY_CONF" | caddy -conf stdin
+    networks:
+      default:
+        aliases:
+          - giteaty.local
+          - gitea.local
+          - client.local
 
   proxy:
     image: serjs/go-socks5-proxy

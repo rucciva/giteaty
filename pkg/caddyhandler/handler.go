@@ -27,7 +27,7 @@ type handlerReturn struct {
 	err error
 
 	// auth signal wheter user is authenticated+authorized or not
-	auth bool
+	next bool
 }
 
 func getReturn(ctx context.Context) (ret *handlerReturn) {
@@ -41,7 +41,7 @@ func setReturn(ctx context.Context, ret handlerReturn) {
 	if r == nil {
 		return
 	}
-	r.i, r.err, r.auth = ret.i, ret.err, ret.auth
+	r.i, r.err, r.next = ret.i, ret.err, ret.next
 }
 
 type handler struct {
@@ -60,7 +60,7 @@ func NewHandler(next httpserver.Handler, drts []*Directive) *handler {
 func (h *handler) initRouter() {
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		i, err := h.next.ServeHTTP(w, r)
-		setReturn(r.Context(), handlerReturn{i: i, err: err, auth: true})
+		setReturn(r.Context(), handlerReturn{i: i, err: err, next: true})
 	})
 	router := chi.NewRouter()
 	chi.RegisterMethod("MOVE")

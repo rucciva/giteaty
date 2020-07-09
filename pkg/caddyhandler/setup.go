@@ -69,6 +69,16 @@ func parseBlock(c *caddy.Controller, drt *Directive) (err error) {
 			}
 			drt.insecure = true
 
+		case "realm":
+			if drt.realm != "" {
+				return fmt.Errorf("can only have one 'realm' section")
+			}
+			args := c.RemainingArgs()
+			if len(args) != 1 {
+				return fmt.Errorf("'realm' only take 1 arg")
+			}
+			drt.realm = args[0]
+
 		case "setBasicAuth":
 			if drt.setBasicAuth != nil {
 				return fmt.Errorf("can only have one 'setBasicAuth' section")

@@ -29,8 +29,8 @@ var authzs = map[authz]bool{
 type Directive struct {
 	giteaURL string
 	insecure bool
-	realm    string
 
+	realm        string
 	paths        []string
 	methods      []string
 	setBasicAuth *string
@@ -84,17 +84,17 @@ func (drt *Directive) denyMiddleware(next http.Handler) http.Handler {
 
 func (drt *Directive) wwwAuthenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if drt.realm != "" {
-			w.Header().Set("WWW-Authenticate", `Basic realm="`+drt.realm+`"`)
-		}
-
 		next.ServeHTTP(w, r)
 
-		ret := getReturn(r.Context())
-		if ret == nil || ret.next || drt.realm == "" {
+		if drt.realm == "" {
 			return
 		}
-		// just ask password so that basic auth form always be displayed
+		ret := getReturn(r.Context())
+		if ret == nil || ret.next {
+			return
+		}
+		// just ask password so that basic auth form always get displayed
+		w.Header().Set("WWW-Authenticate", `Basic realm="`+drt.realm+`"`)
 		ret.i = 401
 	})
 }

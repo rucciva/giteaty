@@ -11,7 +11,7 @@ import (
 
 func TestChiAssumption(t *testing.T) {
 	type path struct {
-		m, a, b, c, d int
+		z, m, a, b, c, d, e int
 	}
 	serve := func(w http.ResponseWriter, r *http.Request) path {
 		p := path{}
@@ -36,33 +36,44 @@ func TestChiAssumption(t *testing.T) {
 				p.d++
 			}))
 		})
+		rtr.Method("MOVE", "/syalala", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			p.e++
+		}))
+		rtr.NotFound(func(w http.ResponseWriter, r *http.Request) {
+			p.z++
+		})
 		rtr.ServeHTTP(w, r)
 		return p
 	}
 
-	var w http.ResponseWriter
+	var w *httptest.ResponseRecorder
 	var r *http.Request
 
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest(http.MethodGet, "/basic/lala", nil)
-	assert.Equal(t, path{1, 1, 0, 0, 0}, serve(w, r))
+	assert.Equal(t, path{m: 1, a: 1}, serve(w, r))
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest(http.MethodGet, "/basic/lala/info", nil)
-	assert.Equal(t, path{1, 1, 0, 0, 0}, serve(w, r))
+	assert.Equal(t, path{m: 1, a: 1}, serve(w, r))
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest(http.MethodGet, "/basic/lala/tes/info/", nil)
-	assert.Equal(t, path{1, 1, 0, 0, 0}, serve(w, r))
+	assert.Equal(t, path{m: 1, a: 1}, serve(w, r))
 
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest(http.MethodGet, "/basic/lala/tes/info", nil)
-	assert.Equal(t, path{1, 0, 1, 0, 0}, serve(w, r))
+	assert.Equal(t, path{m: 1, b: 1}, serve(w, r))
 
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest(http.MethodGet, "/basic/lala/testinfo", nil)
-	assert.Equal(t, path{1, 0, 0, 1, 0}, serve(w, r))
+	assert.Equal(t, path{m: 1, c: 1}, serve(w, r))
 
 	w = httptest.NewRecorder()
 	r = httptest.NewRequest(http.MethodGet, "/basic/lala/test/info", nil)
-	assert.Equal(t, path{1, 0, 0, 0, 1}, serve(w, r))
+	assert.Equal(t, path{m: 1, d: 1}, serve(w, r))
+
+	w = httptest.NewRecorder()
+	r = httptest.NewRequest("MOVE", "/syalala", nil)
+	assert.Equal(t, path{e: 1}, serve(w, r))
+	assert.Equal(t, 200, w.Code)
 
 }

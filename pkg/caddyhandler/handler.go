@@ -13,6 +13,14 @@ var (
 	errUnauthorized = errors.New("403 Forbidden")
 )
 
+func init() {
+	// http://www.webdav.org/specs/rfc4918.html#http.methods.for.distributed.authoring
+	customMethods := []string{"PROPFIND", "PROPPATCH", "MKCOL", "COPY", "MOVE", "LOCK", "UNLOCK"}
+	for _, m := range customMethods {
+		chi.RegisterMethod(m)
+	}
+}
+
 type handlerReturnKey struct{}
 type handlerReturn struct {
 	i   int
@@ -55,6 +63,8 @@ func (h *handler) initRouter() {
 		setReturn(r.Context(), handlerReturn{i: i, err: err, auth: true})
 	})
 	router := chi.NewRouter()
+	chi.RegisterMethod("MOVE")
+	chi.RegisterMethod("MOVE")
 	router.NotFound(http.HandlerFunc(next))
 	for _, drt := range h.directives {
 		for _, path := range drt.paths {

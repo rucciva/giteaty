@@ -8,6 +8,17 @@ import (
 	"code.gitea.io/sdk/gitea"
 )
 
+func (drt *Directive) newGiteaClient(req *http.Request) *gitea.Client {
+	rt := roundtripper{RoundTripper: http.DefaultTransport, caddyReq: req}
+	if drt.insecure {
+		rt.RoundTripper = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
+	}
+	hc := &http.Client{Transport: rt}
+	gc := gitea.NewClientWithHTTP(drt.giteaURL, hc)
+	return gc
+}
+
 type roundtripper struct {
 	http.RoundTripper
 
@@ -41,15 +52,4 @@ func (rt roundtripper) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 
 	return rt.RoundTripper.RoundTrip(req)
-}
-
-func (drt *Directive) newGiteaClient(req *http.Request) *gitea.Client {
-	rt := roundtripper{RoundTripper: http.DefaultTransport, caddyReq: req}
-	if drt.insecure {
-		rt.RoundTripper = &http.Transport{
-			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}
-	}
-	hc := &http.Client{Transport: rt}
-	gc := gitea.NewClientWithHTTP(drt.giteaURL, hc)
-	return gc
 }

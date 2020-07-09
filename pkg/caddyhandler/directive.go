@@ -84,20 +84,17 @@ func (drt *Directive) denyMiddleware(next http.Handler) http.Handler {
 
 func (drt *Directive) wwwAuthenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		next.ServeHTTP(w, r)
-		if drt.realm == "" {
-			return
+		if drt.realm != "" {
+			w.Header().Set("WWW-Authenticate", `Basic realm="`+drt.realm+`"`)
 		}
+
+		next.ServeHTTP(w, r)
 
 		ret := getReturn(r.Context())
-		if ret == nil {
+		if ret == nil || ret.next || drt.realm == "" {
 			return
 		}
-		w.Header().Set("WWW-Authenticate", `Basic realm="`+drt.realm+`"`)
-
-		if !ret.auth {
-			// just ask password so that basic auth form always be displayed
-			ret.i = 401
-		}
+		// just ask password so that basic auth form always be displayed
+		ret.i = 401
 	})
 }

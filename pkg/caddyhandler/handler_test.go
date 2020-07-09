@@ -63,6 +63,7 @@ func tNewHandler(t *testing.T, conf string, ress []testResponse) (h *testHandler
 
 	next := httpserver.HandlerFunc(func(w http.ResponseWriter, r *http.Request) (i int, err error) {
 		h.reqFwd = r
+		w.Header().Set("next", "true")
 		return 201, nil
 	})
 	h.handler, _ = httpserver.GetConfig(c).Middleware()[0](next).(*handler)
@@ -97,6 +98,14 @@ func (h testHandler) mustUseBasicAuth(t *testing.T, req *http.Request, user stri
 	assert.Equal(t, user, u, "should pass username")
 	assert.Equal(t, pass, p, "should pass password")
 	assert.True(t, ok, "should pass basic auth")
+}
+
+func (h testHandler) mustNotModifyNextResponse(t *testing.T, w *httptest.ResponseRecorder) {
+	assert.Equal(t, w.Code, 0, "should not write status code")
+	assert.Nil(t, w.Body, "should not write body")
+	// header set by next
+	assert.Equal(t, "true", w.Header().Get("next"), "should not write header")
+	assert.Len(t, w.Header(), 1, "should not write header")
 }
 
 func (h testHandler) mustNotWriteResponse(t *testing.T, w *httptest.ResponseRecorder) {
@@ -148,6 +157,15 @@ func (h testHandler) mustWriteWWWAuthenticate(t *testing.T, w *httptest.Response
 	b := fmt.Sprintf(`Basic realm="%s"`, realm)
 	assert.Equal(t, 0, w.Code, "should not write status code")
 	assert.Equal(t, b, w.Header().Get("WWW-Authenticate"), "should not write header")
+	assert.Equal(t, "true", w.Header().Get("next"), "should not write header")
+	assert.Len(t, w.Header(), 2)
+	assert.Nil(t, w.Body, "should not write body")
+}
+
+func (h testHandler) mustWriteWWWAuthenticateOnly(t *testing.T, w *httptest.ResponseRecorder, realm string) {
+	b := fmt.Sprintf(`Basic realm="%s"`, realm)
+	assert.Equal(t, 0, w.Code, "should not write status code")
+	assert.Equal(t, b, w.Header().Get("WWW-Authenticate"), "should not write header")
 	assert.Len(t, w.Header(), 1)
 	assert.Nil(t, w.Body, "should not write body")
 }
@@ -182,9 +200,9 @@ func TestHandlerPassthroughOrDeny(t *testing.T) {
 			r := httptest.NewRequest(http.MethodGet, d.path, strings.NewReader(`{"message" : "hi"}`))
 			h := tNewHandler(t, conf, nil)
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
-			h.mustForwardNextReturn(t, i, err)
-			h.mustNotWriteResponse(t, w)
 			h.mustForwardReq(t, r)
+			h.mustForwardNextReturn(t, i, err)
+			h.mustNotModifyNextResponse(t, w)
 			require.Len(t, h.reqGitea, 0, "should not call gitea API")
 		})
 	}
@@ -241,9 +259,9 @@ func TestHandlerAssertUser(t *testing.T) {
 			h := tNewHandler(t, conf, ress)
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
 
-			h.mustForwardNextReturn(t, i, err)
-			h.mustNotWriteResponse(t, w)
 			h.mustForwardReq(t, r)
+			h.mustForwardNextReturn(t, i, err)
+			h.mustNotModifyNextResponse(t, w)
 			require.Len(t, h.reqGitea, 1, "should call gitea API exactly once")
 			h.mustAssertUser(t, h.reqGitea[0])
 			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
@@ -300,9 +318,9 @@ func TestAssertUsers(t *testing.T) {
 			h := tNewHandler(t, conf, ress)
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
 
-			h.mustForwardNextReturn(t, i, err)
-			h.mustNotWriteResponse(t, w)
 			h.mustForwardReq(t, r)
+			h.mustForwardNextReturn(t, i, err)
+			h.mustNotModifyNextResponse(t, w)
 			require.Len(t, h.reqGitea, 1, "should call gitea API exactly once")
 			h.mustAssertUser(t, h.reqGitea[0])
 			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
@@ -390,9 +408,9 @@ func TestHandlerAssertRepo(t *testing.T) {
 			h := tNewHandler(t, conf, ress)
 
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
-			h.mustForwardNextReturn(t, i, err)
-			h.mustNotWriteResponse(t, w)
 			h.mustForwardReq(t, r)
+			h.mustForwardNextReturn(t, i, err)
+			h.mustNotModifyNextResponse(t, w)
 			require.Len(t, h.reqGitea, 2, "should call gitea API twice")
 			h.mustAssertRepo(t, h.reqGitea[0], d.owner, d.repo)
 			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
@@ -510,9 +528,9 @@ func TestHandlerAssertOrg(t *testing.T) {
 			h := tNewHandler(t, conf, ress)
 
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
-			h.mustForwardNextReturn(t, i, err)
-			h.mustNotWriteResponse(t, w)
 			h.mustForwardReq(t, r)
+			h.mustForwardNextReturn(t, i, err)
+			h.mustNotModifyNextResponse(t, w)
 			require.Len(t, h.reqGitea, 1, "should call gitea API once")
 			h.mustAssertOrgTeams(t, h.reqGitea[0])
 			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
@@ -595,9 +613,9 @@ func TestHandlerRepoOrOrgSetBasicAuth(t *testing.T) {
 			h := tNewHandler(t, conf, ress)
 
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
-			h.mustForwardNextReturn(t, i, err)
-			h.mustNotWriteResponse(t, w)
 			h.mustForwardReqWithCustomBasicAuthPass(t, r, "syala")
+			h.mustForwardNextReturn(t, i, err)
+			h.mustNotModifyNextResponse(t, w)
 			require.Len(t, h.reqGitea, 3, "should call gitea API trice")
 			h.mustAssertRepo(t, h.reqGitea[0], "user", "name")
 			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
@@ -644,9 +662,9 @@ func TestHandlerRepoAndOrgSetBasicAuth(t *testing.T) {
 			h := tNewHandler(t, conf, ress)
 
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
-			h.mustForwardNextReturn(t, i, err)
-			h.mustNotWriteResponse(t, w)
 			h.mustForwardReqWithCustomBasicAuthPass(t, r, "syala")
+			h.mustForwardNextReturn(t, i, err)
+			h.mustNotModifyNextResponse(t, w)
 			require.Len(t, h.reqGitea, 4, "should call gitea API trice")
 			h.mustAssertRepo(t, h.reqGitea[0], "user", "name")
 			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
@@ -688,9 +706,9 @@ func TestHandlerWWWAuthenticate(t *testing.T) {
 			h := tNewHandler(t, conf, ress)
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
 
-			h.mustWriteWWWAuthenticate(t, w, "somewebsite")
-			h.mustForwardNextReturn(t, i, err)
 			h.mustForwardReq(t, r)
+			h.mustForwardNextReturn(t, i, err)
+			h.mustWriteWWWAuthenticate(t, w, "somewebsite")
 			require.Len(t, h.reqGitea, 1, "should call gitea API exactly once")
 			h.mustAssertUser(t, h.reqGitea[0])
 			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
@@ -709,7 +727,7 @@ func TestHandlerWWWAuthenticate(t *testing.T) {
 			h := tNewHandler(t, conf, ress)
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
 
-			h.mustWriteWWWAuthenticate(t, w, "somewebsite")
+			h.mustWriteWWWAuthenticateOnly(t, w, "somewebsite")
 			h.mustNotForwardRequestAndReturn401(t, i, err)
 			require.Len(t, h.reqGitea, 1, "should call gitea API exactly once")
 			h.mustAssertUser(t, h.reqGitea[0])

@@ -29,6 +29,7 @@ var authzs = map[authz]bool{
 type Directive struct {
 	giteaURL string
 	insecure bool
+	realm    string
 
 	paths        []string
 	methods      []string
@@ -72,7 +73,7 @@ func (drt *Directive) handler(next http.Handler) http.Handler {
 	if drt.setBasicAuth != nil && !userAsserted {
 		next = drt.assertUserMiddleware(next)
 	}
-	return drt.assertLoginMiddleware(m(next))
+	return drt.wwwAuthenticate(m(next))
 }
 
 func (drt *Directive) denyMiddleware(next http.Handler) http.Handler {
@@ -81,17 +82,22 @@ func (drt *Directive) denyMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (drt *Directive) assertLoginMiddleware(next http.Handler) http.Handler {
+func (drt *Directive) wwwAuthenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		next.ServeHTTP(w, r)
-
-		ret := getReturn(r.Context())
-		if ret == nil || ret.auth {
+		if drt.realm == "" {
 			return
 		}
 
-		// just ask password so that basic auth form always be displayed
-		ret.i = 401
-		w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
+		ret := getReturn(r.Context())
+		if ret == nil {
+			return
+		}
+		w.Header().Set("WWW-Authenticate", `Basic realm="`+drt.realm+`"`)
+
+		if !ret.auth {
+			// just ask password so that basic auth form always be displayed
+			ret.i = 401
+		}
 	})
 }

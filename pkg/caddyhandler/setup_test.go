@@ -31,6 +31,8 @@ func TestParseDirectives(t *testing.T) {
 			giteaty https://gitea.io/
 			giteaty https://gitea.io/ {
 				insecure
+				realm somewebsite
+
 				paths /test1 /test2
 				methods gEt pOsT
 				authz users
@@ -57,6 +59,7 @@ func TestParseDirectives(t *testing.T) {
 				{
 					giteaURL: "https://gitea.io",
 					insecure: true,
+					realm:    "somewebsite",
 					paths:    []string{"/test1", "/test2"},
 					methods:  []string{http.MethodGet, http.MethodPost},
 					authz:    authzUsers,

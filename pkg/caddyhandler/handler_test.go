@@ -158,19 +158,20 @@ func TestHandlerPassthroughOrDeny(t *testing.T) {
 		}
 	`
 
-	paths := []string{
-		"/",
-		"/tester",
-		"/tester/something",
-		"/tester/something/else",
-		"/developer",
-		"/developer/something",
-		"/developer/something/else",
+	data := []struct{ path string }{
+		{path: "/"},
+		{path: "/tester"},
+		{path: "/tester/something"},
+		{path: "/tester/something/else"},
+		{path: "/developer"},
+		{path: "/developer/something"},
+		{path: "/developer/something/else"},
 	}
-	for _, p := range paths {
-		t.Run("Passthrough"+p, func(t *testing.T) {
+
+	for _, d := range data {
+		t.Run("Passthrough"+d.path, func(t *testing.T) {
 			w := &httptest.ResponseRecorder{}
-			r := httptest.NewRequest(http.MethodGet, p, strings.NewReader(`{"message" : "hi"}`))
+			r := httptest.NewRequest(http.MethodGet, d.path, strings.NewReader(`{"message" : "hi"}`))
 			h := tNewHandler(t, conf, nil)
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
 			h.mustRelayNextResponse(t, i, err)
@@ -180,16 +181,17 @@ func TestHandlerPassthroughOrDeny(t *testing.T) {
 		})
 	}
 
-	paths = []string{
-		"/dev",
-		"/test",
-		"/dev/something",
-		"/test/something",
+	data = []struct{ path string }{
+		{path: "/dev"},
+		{path: "/test"},
+		{path: "/dev/something"},
+		{path: "/test/something"},
 	}
-	for _, p := range paths {
-		t.Run("Deny"+p, func(t *testing.T) {
+
+	for _, d := range data {
+		t.Run("Deny"+d.path, func(t *testing.T) {
 			w := &httptest.ResponseRecorder{}
-			r := httptest.NewRequest(http.MethodGet, p, strings.NewReader(`{"message" : "hi"}`))
+			r := httptest.NewRequest(http.MethodGet, d.path, strings.NewReader(`{"message" : "hi"}`))
 			h := tNewHandler(t, conf, nil)
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
 			h.mustDenyRequest(t, i, err)
@@ -209,23 +211,24 @@ func TestHandlerAssertUser(t *testing.T) {
 	}
 	`
 
-	paths := []string{
-		"/test",
-		"/test/something",
-		"/test/something/else",
-		"/dev",
-		"/dev/something",
-		"/dev/something/else",
+	data := []struct{ path string }{
+		{path: "/test"},
+		{path: "/test/something"},
+		{path: "/test/something/else"},
+		{path: "/dev"},
+		{path: "/dev/something"},
+		{path: "/dev/something/else"},
 	}
-	for _, p := range paths {
-		t.Run("Success"+p, func(t *testing.T) {
+
+	for _, d := range data {
+		t.Run("Success"+d.path, func(t *testing.T) {
 			user, pass := "user", "pass"
 			ress := []testResponse{
 				{200, nil, &gitea.User{UserName: user}},
 			}
 
 			w := &httptest.ResponseRecorder{}
-			r := httptest.NewRequest(http.MethodGet, p, strings.NewReader(`{"message" : "hi"}`))
+			r := httptest.NewRequest(http.MethodGet, d.path, strings.NewReader(`{"message" : "hi"}`))
 			r.SetBasicAuth(user, pass)
 			h := tNewHandler(t, conf, ress)
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
@@ -239,15 +242,15 @@ func TestHandlerAssertUser(t *testing.T) {
 		})
 	}
 
-	for _, p := range paths {
-		t.Run("Unauthorized"+p, func(t *testing.T) {
+	for _, d := range data {
+		t.Run("Unauthorized"+d.path, func(t *testing.T) {
 			user, pass := "user", "pass"
 			ress := []testResponse{
 				{401, nil, map[string]interface{}{"message": "Unauthorized"}},
 			}
 
 			w := &httptest.ResponseRecorder{}
-			r := httptest.NewRequest(http.MethodGet, p, strings.NewReader(`{"message" : "hi"}`))
+			r := httptest.NewRequest(http.MethodGet, d.path, strings.NewReader(`{"message" : "hi"}`))
 			r.SetBasicAuth(user, pass)
 			h := tNewHandler(t, conf, ress)
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
@@ -271,19 +274,20 @@ func TestAssertUsers(t *testing.T) {
 		}
 	`
 
-	paths := []string{
-		"/dev/test/name",
-		"/dev/sya",
+	data := []struct{ path string }{
+		{path: "/dev/test/name"},
+		{path: "/dev/sya"},
 	}
-	for _, p := range paths {
-		t.Run("Success"+p, func(t *testing.T) {
+
+	for _, d := range data {
+		t.Run("Success"+d.path, func(t *testing.T) {
 			user, pass := "user", "pass"
 			ress := []testResponse{
 				{200, nil, &gitea.User{UserName: user}},
 			}
 
 			w := &httptest.ResponseRecorder{}
-			r := httptest.NewRequest(http.MethodGet, p, strings.NewReader(`{"message" : "hi"}`))
+			r := httptest.NewRequest(http.MethodGet, d.path, strings.NewReader(`{"message" : "hi"}`))
 			r.SetBasicAuth(user, pass)
 			h := tNewHandler(t, conf, ress)
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
@@ -297,15 +301,15 @@ func TestAssertUsers(t *testing.T) {
 		})
 	}
 
-	for _, p := range paths {
-		t.Run("Unauthorized"+p, func(t *testing.T) {
+	for _, d := range data {
+		t.Run("Unauthorized"+d.path, func(t *testing.T) {
 			user, pass := "user2", "pass"
 			ress := []testResponse{
 				{200, nil, &gitea.User{UserName: user}},
 			}
 
 			w := &httptest.ResponseRecorder{}
-			r := httptest.NewRequest(http.MethodGet, p, strings.NewReader(`{"message" : "hi"}`))
+			r := httptest.NewRequest(http.MethodGet, d.path, strings.NewReader(`{"message" : "hi"}`))
 			r.SetBasicAuth(user, pass)
 			h := tNewHandler(t, conf, ress)
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
@@ -549,7 +553,7 @@ func TestHandlerAssertOrg(t *testing.T) {
 	}
 }
 
-func TestHandlerSetBasicAuth(t *testing.T) {
+func TestHandlerRepoOrOrgSetBasicAuth(t *testing.T) {
 	conf := `
 		giteaty  {{.URL}} {
 			paths /*
@@ -569,28 +573,81 @@ func TestHandlerSetBasicAuth(t *testing.T) {
 	}
 
 	for _, d := range data {
-		user, pass := "user", "pass"
-		ress := []testResponse{
-			{404, nil, map[string]interface{}{"message": "not found"}},
-			{200, nil, []*gitea.Team{{Name: "Owners", Organization: &gitea.Organization{UserName: "org"}}}},
-			{200, nil, &gitea.User{UserName: user}},
+		t.Run("Success"+d.path, func(t *testing.T) {
+			user, pass := "user", "pass"
+			ress := []testResponse{
+				{404, nil, map[string]interface{}{"message": "not found"}},
+				{200, nil, []*gitea.Team{{Name: "Owners", Organization: &gitea.Organization{UserName: "org"}}}},
+				{200, nil, &gitea.User{UserName: user}},
+			}
+
+			w := &httptest.ResponseRecorder{}
+			r := httptest.NewRequest(http.MethodGet, d.path, strings.NewReader(`{"message" : "hi"}`))
+			r.SetBasicAuth(user, pass)
+			h := tNewHandler(t, conf, ress)
+
+			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
+			h.mustRelayNextResponse(t, i, err)
+			h.mustNotWriteResponse(t, w)
+			h.mustForwardReqWithCustomBasicAuthPass(t, r, "syala")
+			require.Len(t, h.reqGitea, 3, "should call gitea API trice")
+			h.mustAssertRepo(t, h.reqGitea[0], "user", "name")
+			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
+			h.mustAssertOrgTeams(t, h.reqGitea[1])
+			h.mustUseBasicAuth(t, h.reqGitea[1], user, pass)
+			h.mustAssertUser(t, h.reqGitea[2])
+			h.mustUseBasicAuth(t, h.reqGitea[2], user, pass)
+		})
+	}
+}
+
+func TestHandlerRepoAndOrgSetBasicAuth(t *testing.T) {
+	conf := `
+		giteaty  {{.URL}} {
+			paths /*
+			setBasicAuth syala
+			authz repoAndOrg
+
+			repo user name
+			org org
 		}
+	`
 
-		w := &httptest.ResponseRecorder{}
-		r := httptest.NewRequest(http.MethodGet, d.path, strings.NewReader(`{"message" : "hi"}`))
-		r.SetBasicAuth(user, pass)
-		h := tNewHandler(t, conf, ress)
+	data := []struct {
+		path string
+	}{
+		{path: "/lala"},
+		{path: "/syalala"},
+	}
 
-		i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
-		h.mustRelayNextResponse(t, i, err)
-		h.mustNotWriteResponse(t, w)
-		h.mustForwardReqWithCustomBasicAuthPass(t, r, "syala")
-		require.Len(t, h.reqGitea, 3, "should call gitea API trice")
-		h.mustAssertRepo(t, h.reqGitea[0], "user", "name")
-		h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
-		h.mustAssertOrgTeams(t, h.reqGitea[1])
-		h.mustUseBasicAuth(t, h.reqGitea[1], user, pass)
-		h.mustAssertUser(t, h.reqGitea[2])
-		h.mustUseBasicAuth(t, h.reqGitea[2], user, pass)
+	for _, d := range data {
+		t.Run("Success"+d.path, func(t *testing.T) {
+			user, pass := "user", "pass"
+			ress := []testResponse{
+				{200, nil, &gitea.Repository{Name: "repo", Owner: &gitea.User{UserName: "user"}}},
+				{200, nil, []gitea.Branch{}},
+				{200, nil, []*gitea.Team{{Name: "Owners", Organization: &gitea.Organization{UserName: "org"}}}},
+				{200, nil, &gitea.User{UserName: user}},
+			}
+
+			w := &httptest.ResponseRecorder{}
+			r := httptest.NewRequest(http.MethodGet, d.path, strings.NewReader(`{"message" : "hi"}`))
+			r.SetBasicAuth(user, pass)
+			h := tNewHandler(t, conf, ress)
+
+			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
+			h.mustRelayNextResponse(t, i, err)
+			h.mustNotWriteResponse(t, w)
+			h.mustForwardReqWithCustomBasicAuthPass(t, r, "syala")
+			require.Len(t, h.reqGitea, 4, "should call gitea API trice")
+			h.mustAssertRepo(t, h.reqGitea[0], "user", "name")
+			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
+			h.mustAssertRepoBranch(t, h.reqGitea[1], "user", "name")
+			h.mustUseBasicAuth(t, h.reqGitea[1], user, pass)
+			h.mustAssertOrgTeams(t, h.reqGitea[2])
+			h.mustUseBasicAuth(t, h.reqGitea[2], user, pass)
+			h.mustAssertUser(t, h.reqGitea[3])
+			h.mustUseBasicAuth(t, h.reqGitea[3], user, pass)
+		})
 	}
 }

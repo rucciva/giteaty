@@ -63,8 +63,6 @@ func (h *handler) initRouter() {
 		setReturn(r.Context(), handlerReturn{i: i, err: err, next: true})
 	})
 	router := chi.NewRouter()
-	chi.RegisterMethod("MOVE")
-	chi.RegisterMethod("MOVE")
 	router.NotFound(http.HandlerFunc(next))
 	for _, drt := range h.directives {
 		for _, path := range drt.paths {

@@ -14,6 +14,25 @@ type orgConfig struct {
 	teams      map[string]bool
 }
 
+func (drt *Directive) assertOrgTeamMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		err := drt.assertOrgTeam(r, drt.getOrg(r))
+		if err != nil {
+			setReturn(r.Context(), handlerReturn{i: 403, err: err})
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (drt *Directive) getOrg(r *http.Request) (name string) {
+	name = drt.org.name
+	if !drt.org.nameStatic {
+		name = chi.URLParam(r, name)
+	}
+	return
+}
+
 func (drt *Directive) assertOrgTeam(req *http.Request, orgname string) (err error) {
 	gcl := drt.newGiteaClient(req)
 	teams, err := gcl.ListMyTeams(&gitea.ListTeamsOptions{})
@@ -28,19 +47,4 @@ func (drt *Directive) assertOrgTeam(req *http.Request, orgname string) (err erro
 		}
 	}
 	return errUnauthorized
-}
-
-func (drt *Directive) assertOrgTeamMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		name := drt.org.name
-		if !drt.org.nameStatic {
-			name = chi.URLParam(r, name)
-		}
-		err := drt.assertOrgTeam(r, name)
-		if err != nil {
-			setReturn(r.Context(), handlerReturn{403, err, false})
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
 }

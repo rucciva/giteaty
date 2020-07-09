@@ -9,16 +9,18 @@ import (
 	"github.com/go-chi/chi"
 )
 
-type handlerReturnKey struct{}
-type handlerReturn struct {
-	i    int
-	err  error
-	auth bool
-}
-
 var (
 	errUnauthorized = errors.New("403 Forbidden")
 )
+
+type handlerReturnKey struct{}
+type handlerReturn struct {
+	i   int
+	err error
+
+	// auth signal wheter user is authenticated+authorized or not
+	auth bool
+}
 
 func getReturn(ctx context.Context) (ret *handlerReturn) {
 	v := ctx.Value(handlerReturnKey{})
@@ -50,7 +52,7 @@ func NewHandler(next httpserver.Handler, drts []*Directive) *handler {
 func (h *handler) initRouter() {
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		i, err := h.next.ServeHTTP(w, r)
-		setReturn(r.Context(), handlerReturn{i, err, true})
+		setReturn(r.Context(), handlerReturn{i: i, err: err, auth: true})
 	})
 	router := chi.NewRouter()
 	router.NotFound(http.HandlerFunc(next))

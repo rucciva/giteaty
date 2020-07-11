@@ -99,6 +99,27 @@ func (h testHandler) mustUseBasicAuth(t *testing.T, req *http.Request, user stri
 	assert.Equal(t, pass, p, "should pass password")
 	assert.True(t, ok, "should pass basic auth")
 }
+func (h testHandler) mustUseToken(t *testing.T, req *http.Request, token string) {
+	tok := req.Header.Get("Authorization")
+	if tok != "" {
+		v := strings.Split(tok, " ")
+		require.Len(t, v, 2)
+		assert.Equal(t, "token", v[0])
+		assert.Equal(t, token, v[1])
+		return
+	}
+	tok = req.URL.Query().Get("access_token")
+	if tok != "" {
+		assert.Equal(t, token, tok)
+		return
+	}
+	tok = req.URL.Query().Get("token")
+	if tok != "" {
+		assert.Equal(t, token, tok)
+		return
+	}
+	t.Error("no token found")
+}
 
 func (h testHandler) mustNotModifyNextResponse(t *testing.T, w *httptest.ResponseRecorder) {
 	assert.Equal(t, w.Code, 0, "should not write status code")
@@ -173,10 +194,16 @@ func TestHandlerPassthroughOrDeny(t *testing.T) {
 			paths  /test /test/* /dev /dev/*
 			authz deny
 		}
+		giteaty {{.URL}} {
+			paths /test/123 /dev/123
+			noauth
+		}
 	`
 
 	data := []struct{ path string }{
 		{path: "/"},
+		{path: "/dev/123"},
+		{path: "/test/123"},
 		{path: "/tester"},
 		{path: "/tester/something"},
 		{path: "/tester/something/else"},
@@ -723,6 +750,42 @@ func TestHandlerWWWAuthenticate(t *testing.T) {
 			require.Len(t, h.reqGitea, 1, "should call gitea API exactly once")
 			h.mustAssertUser(t, h.reqGitea[0])
 			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
+		})
+	}
+}
+
+func TestTokenViaBasicAuth(t *testing.T) {
+	conf := `
+	giteaty {{.URL}} {
+		paths /test /test/*
+	}
+	`
+
+	data := []struct{ path string }{
+		{path: "/test"},
+		{path: "/test/something"},
+		{path: "/test/something/else"},
+	}
+
+	for _, d := range data {
+		t.Run("Success"+d.path, func(t *testing.T) {
+			token := "123456"
+			ress := []testResponse{
+				{200, nil, &gitea.User{UserName: "someuser"}},
+			}
+
+			w := &httptest.ResponseRecorder{}
+			r := httptest.NewRequest(http.MethodGet, d.path, strings.NewReader(`{"message" : "hi"}`))
+			r.SetBasicAuth("", token)
+			h := tNewHandler(t, conf, ress)
+			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
+
+			h.mustForwardReq(t, r)
+			h.mustForwardNextReturn(t, i, err)
+			h.mustNotModifyNextResponse(t, w)
+			require.Len(t, h.reqGitea, 1, "should call gitea API exactly once")
+			h.mustAssertUser(t, h.reqGitea[0])
+			h.mustUseToken(t, h.reqGitea[0], token)
 		})
 	}
 }

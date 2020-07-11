@@ -28,7 +28,9 @@ func TestParseDirectives(t *testing.T) {
 		},
 		{
 			input: `
-			giteaty https://gitea.io/
+			giteaty https://gitea.io/ {
+				noauth
+			}
 			giteaty https://gitea.io/ {
 				insecure
 				realm somewebsite
@@ -55,6 +57,7 @@ func TestParseDirectives(t *testing.T) {
 					giteaURL: "https://gitea.io",
 					paths:    []string{"/"},
 					authz:    authzNone,
+					noauth:   true,
 				},
 				{
 					giteaURL: "https://gitea.io",

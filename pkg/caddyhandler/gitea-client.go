@@ -35,10 +35,13 @@ func (rt roundtripper) RoundTrip(req *http.Request) (*http.Response, error) {
 		req.Header[http.CanonicalHeaderKey("Authorization")] = append([]string(nil), v...)
 	}
 	if u, p, ok := rt.caddyReq.BasicAuth(); ok {
-		// otp workaround
-		if s := strings.Split(u, ";"); len(s) == 2 {
+		if u == "" {
+			// workaround for token via basic auth with empty user
+			req.Header.Set("Authorization", "token "+p)
+		} else if s := strings.Split(u, ";"); len(s) == 2 {
+			// workaround for otp in username
 			req.SetBasicAuth(s[0], p)
-			req.Header[http.CanonicalHeaderKey("X-Gitea-OTP")] = []string{s[1]}
+			req.Header.Set("X-Gitea-OTP", s[1])
 		}
 	}
 	if v, ok := rt.caddyReq.Header[http.CanonicalHeaderKey("X-Gitea-OTP")]; ok {

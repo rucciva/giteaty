@@ -67,7 +67,37 @@ func parseBlock(c *caddy.Controller, drt *Directive) (err error) {
 			if drt.insecure {
 				return fmt.Errorf("can only have one 'insecure' section")
 			}
+			c.RemainingArgs()
 			drt.insecure = true
+
+		case "paths":
+			drt.paths = append(drt.paths, c.RemainingArgs()...)
+
+		case "methods":
+			for _, arg := range c.RemainingArgs() {
+				drt.methods = append(drt.methods, strings.ToUpper(arg))
+			}
+
+		case "noauth":
+			if drt.noauth {
+				return fmt.Errorf("can only have one 'noauth' section")
+			}
+			c.RemainingArgs()
+			drt.noauth = true
+
+		case "authz":
+			if azIsSet {
+				return fmt.Errorf("can only have one 'authz' section")
+			}
+			args := c.RemainingArgs()
+			if len(args) != 1 {
+				return fmt.Errorf("'authz' takes exactly 1 arg")
+			}
+			if !authzs[authz(args[0])] {
+				return fmt.Errorf("unknown 'authz' %s", args[0])
+			}
+			drt.authz = authz(args[0])
+			azIsSet = true
 
 		case "realm":
 			if drt.realm != "" {
@@ -89,14 +119,6 @@ func parseBlock(c *caddy.Controller, drt *Directive) (err error) {
 			}
 			drt.setBasicAuth = &args[0]
 
-		case "paths":
-			drt.paths = append(drt.paths, c.RemainingArgs()...)
-
-		case "methods":
-			for _, arg := range c.RemainingArgs() {
-				drt.methods = append(drt.methods, strings.ToUpper(arg))
-			}
-
 		case "users":
 			if drt.users == nil {
 				drt.users = make(map[string]bool)
@@ -104,20 +126,6 @@ func parseBlock(c *caddy.Controller, drt *Directive) (err error) {
 			for _, arg := range c.RemainingArgs() {
 				drt.users[arg] = true
 			}
-
-		case "authz":
-			if azIsSet {
-				return fmt.Errorf("can only have one 'authz' section")
-			}
-			args := c.RemainingArgs()
-			if len(args) != 1 {
-				return fmt.Errorf("'authz' takes exactly 1 arg")
-			}
-			if !authzs[authz(args[0])] {
-				return fmt.Errorf("unknown 'authz' %s", args[0])
-			}
-			drt.authz = authz(args[0])
-			azIsSet = true
 
 		case "repo":
 			if drt.repo != nil {

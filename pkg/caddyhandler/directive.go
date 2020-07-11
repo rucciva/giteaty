@@ -30,18 +30,23 @@ type Directive struct {
 	giteaURL string
 	insecure bool
 
-	realm        string
-	paths        []string
-	methods      []string
-	setBasicAuth *string
+	paths   []string
+	methods []string
+	noauth  bool
+	authz   authz
 
-	authz authz
-	users map[string]bool
-	repo  *repoConfig
-	org   *orgConfig
+	setBasicAuth *string
+	realm        string
+	users        map[string]bool
+	repo         *repoConfig
+	org          *orgConfig
 }
 
 func (drt *Directive) handler(next http.Handler) http.Handler {
+	if drt.noauth {
+		return next
+	}
+
 	var m func(http.Handler) http.Handler
 
 	userAsserted := false

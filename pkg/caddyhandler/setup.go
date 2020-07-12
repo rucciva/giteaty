@@ -150,8 +150,7 @@ func parseBlock(c *caddy.Controller, drt *Directive) (err error) {
 				return fmt.Errorf("can only have one 'org' section")
 			}
 			drt.org = &orgConfig{
-				name:  "org",
-				teams: map[string]bool{"owners": true},
+				name: "org",
 			}
 			args := c.RemainingArgs()
 			if len(args) > 1 {
@@ -192,21 +191,18 @@ func parsePathParameterName(s string) (p string, static bool) {
 }
 
 func parseOrgSubBlock(c *caddy.Controller, drt *Directive) (err error) {
-	delete(drt.org.teams, "owners")
-
 	for next := c.Next(); next && c.Val() != "}"; next = c.Next() {
 		switch v := c.Val(); v {
 		case "teams":
+			if drt.org.teams == nil {
+				drt.org.teams = make(map[string]bool)
+			}
 			for _, arg := range c.RemainingArgs() {
 				drt.org.teams[strings.ToLower(arg)] = true
 			}
 		default:
 			return fmt.Errorf("unknwon keyword '%s' in 'org' block", v)
 		}
-	}
-
-	if len(drt.org.teams) == 0 {
-		drt.org.teams["owners"] = true
 	}
 	return
 }

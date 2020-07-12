@@ -92,6 +92,10 @@ func (h testHandler) mustAssertOrgTeams(t *testing.T, req *http.Request) {
 	assert.Equal(t, "/api/v1/user/teams", req.URL.Path, "should call get repo branches api")
 	assert.Equal(t, http.MethodGet, req.Method, "should call get repo branches api")
 }
+func (h testHandler) mustAssertOrg(t *testing.T, req *http.Request) {
+	assert.Equal(t, "/api/v1/user/orgs", req.URL.Path, "should call get repo branches api")
+	assert.Equal(t, http.MethodGet, req.Method, "should call get repo branches api")
+}
 
 func (h testHandler) mustUseBasicAuth(t *testing.T, req *http.Request, user string, pass string) {
 	u, p, ok := req.BasicAuth()
@@ -99,6 +103,7 @@ func (h testHandler) mustUseBasicAuth(t *testing.T, req *http.Request, user stri
 	assert.Equal(t, pass, p, "should pass password")
 	assert.True(t, ok, "should pass basic auth")
 }
+
 func (h testHandler) mustUseToken(t *testing.T, req *http.Request, token string) {
 	tok := req.Header.Get("Authorization")
 	if tok != "" {
@@ -518,27 +523,34 @@ func TestHandlerAssertOrg(t *testing.T) {
 		org   string
 		teams []string
 	}{
-		{"/dev/someorg", "someorg", []string{"Owners"}},
+		{"/dev/someorg", "someorg", nil},
 
-		{"/test/something/someorg", "someorg", []string{"Owners"}},
-		{"/test/something/someorg/syalala", "someorg", []string{"Owners"}},
+		{"/test/something/someorg", "someorg", nil},
+		{"/test/something/someorg/syalala", "someorg", nil},
 
 		{"/ops/something/someorg", "someorg", []string{"dev"}},
 		{"/ops/something/someorg", "someorg", []string{"ops"}},
 		{"/ops/something/someorg", "someorg", []string{"sec"}},
 
-		{"/qa", "someorg1", []string{"owners"}},
-		{"/qa/syalala/lala", "someorg1", []string{"owners"}},
+		{"/qa", "someorg1", nil},
+		{"/qa/syalala/lala", "someorg1", nil},
+	}
+
+	giteaRess := func(org string, teams []string) []testResponse {
+		if len(teams) == 0 {
+			return []testResponse{{200, nil, []*gitea.Organization{{UserName: org}}}}
+		}
+		ts := []*gitea.Team{}
+		for _, team := range teams {
+			t := &gitea.Team{Name: team, Organization: &gitea.Organization{UserName: org}}
+			ts = append(ts, t)
+		}
+		return []testResponse{{200, nil, ts}}
 	}
 	for _, d := range data {
 		t.Run("Success#"+d.path, func(t *testing.T) {
 			user, pass := "user", "pass"
-			teams := []*gitea.Team{}
-			for _, team := range d.teams {
-				t := &gitea.Team{Name: team, Organization: &gitea.Organization{UserName: d.org}}
-				teams = append(teams, t)
-			}
-			ress := []testResponse{{200, nil, teams}}
+			ress := giteaRess(d.org, d.teams)
 
 			w := &httptest.ResponseRecorder{}
 			r := httptest.NewRequest(http.MethodGet, d.path, strings.NewReader(`{"message" : "hi"}`))
@@ -550,7 +562,12 @@ func TestHandlerAssertOrg(t *testing.T) {
 			h.mustForwardNextReturn(t, i, err)
 			h.mustNotModifyNextResponse(t, w)
 			require.Len(t, h.reqGitea, 1, "should call gitea API once")
-			h.mustAssertOrgTeams(t, h.reqGitea[0])
+			switch len(d.teams) {
+			case 0:
+				h.mustAssertOrg(t, h.reqGitea[0])
+			default:
+				h.mustAssertOrgTeams(t, h.reqGitea[0])
+			}
 			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
 		})
 	}
@@ -569,17 +586,28 @@ func TestHandlerAssertOrg(t *testing.T) {
 			h.mustNotForwardRequest(t, i, err)
 			h.mustNotWriteResponse(t, w)
 			require.Len(t, h.reqGitea, 1, "should call gitea API once")
-			h.mustAssertOrgTeams(t, h.reqGitea[0])
+			switch len(d.teams) {
+			case 0:
+				h.mustAssertOrg(t, h.reqGitea[0])
+			default:
+				h.mustAssertOrgTeams(t, h.reqGitea[0])
+			}
 			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
-
 		})
 	}
 
 	for _, d := range data {
 		t.Run("NotMemberOf#"+d.path, func(t *testing.T) {
 			user, pass := "user", "pass"
-			ress := []testResponse{
-				{200, nil, []*gitea.Team{{Name: "noone", Organization: &gitea.Organization{UserName: d.org}}}},
+			var ress []testResponse
+			switch len(d.teams) {
+			case 0:
+				ress = []testResponse{{200, nil, []*gitea.Organization{{UserName: "noone"}}}}
+			default:
+				ress = []testResponse{{200, nil, []*gitea.Team{
+					{Name: "noone", Organization: &gitea.Organization{UserName: d.org}},
+					{Name: "noone", Organization: &gitea.Organization{UserName: "noone"}},
+				}}}
 			}
 
 			w := &httptest.ResponseRecorder{}
@@ -591,7 +619,12 @@ func TestHandlerAssertOrg(t *testing.T) {
 			h.mustNotForwardRequest(t, i, err)
 			h.mustNotWriteResponse(t, w)
 			require.Len(t, h.reqGitea, 1, "should call gitea API once")
-			h.mustAssertOrgTeams(t, h.reqGitea[0])
+			switch len(d.teams) {
+			case 0:
+				h.mustAssertOrg(t, h.reqGitea[0])
+			default:
+				h.mustAssertOrgTeams(t, h.reqGitea[0])
+			}
 			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
 		})
 	}
@@ -605,7 +638,9 @@ func TestHandlerRepoOrOrgSetBasicAuth(t *testing.T) {
 			authz repoOrOrg
 
 			repo user name
-			org org
+			org org {
+				teams Owners
+			}
 		}
 	`
 
@@ -653,7 +688,9 @@ func TestHandlerRepoAndOrgSetBasicAuth(t *testing.T) {
 			authz repoAndOrg
 
 			repo user name
-			org org
+			org org {
+				teams Owners
+			}
 		}
 	`
 

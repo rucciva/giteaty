@@ -63,7 +63,7 @@ func (drt *Directive) handler(next http.Handler) http.Handler {
 		m = drt.assertRepoMiddleware
 
 	case authzOrg:
-		m = drt.assertOrgTeamMiddleware
+		m = drt.assertOrgMiddleware
 
 	case authzRepoOrOrg:
 		m = drt.assertRepoOrOrgMiddleware

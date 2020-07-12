@@ -77,8 +77,7 @@ func TestParseDirectives(t *testing.T) {
 						owner: "user", name: "test", nameStatic: true,
 					},
 					org: &orgConfig{
-						name:  "user",
-						teams: map[string]bool{"owners": true},
+						name: "user",
 					},
 				},
 			},

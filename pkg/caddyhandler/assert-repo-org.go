@@ -7,7 +7,7 @@ func (drt *Directive) assertRepoOrOrgMiddleware(next http.Handler) http.Handler 
 		owner, name := drt.getOwnerRepo(r)
 		err := drt.assertRepo(r, owner, name)
 		if err != nil {
-			err = drt.assertOrgTeam(r, drt.getOrg(r))
+			err = drt.assertOrg(r, drt.getOrg(r))
 		}
 		if err != nil {
 			setReturn(r.Context(), handlerReturn{i: 403, err: err})
@@ -26,7 +26,7 @@ func (drt *Directive) assertRepoAndOrgMiddleware(next http.Handler) http.Handler
 			return
 		}
 
-		err = drt.assertOrgTeam(r, drt.getOrg(r))
+		err = drt.assertOrg(r, drt.getOrg(r))
 		if err != nil {
 			setReturn(r.Context(), handlerReturn{i: 403, err: err})
 			return

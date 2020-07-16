@@ -50,6 +50,7 @@ func TestParseDirectives(t *testing.T) {
 
 				repo {user} test 
 				org {user}
+				user {user}
 			}
 			`,
 			directives: []*Directive{
@@ -77,6 +78,9 @@ func TestParseDirectives(t *testing.T) {
 						owner: "user", name: "test", nameStatic: true,
 					},
 					org: &orgConfig{
+						name: "user",
+					},
+					user: &userConfig{
 						name: "user",
 					},
 				},

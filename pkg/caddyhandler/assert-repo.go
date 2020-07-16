@@ -16,8 +16,7 @@ type repoConfig struct {
 
 func (drt *Directive) assertRepoMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		owner, name := drt.getOwnerRepo(r)
-		err := drt.assertRepo(r, owner, name)
+		err := drt.assertRepo(r)
 		if err != nil {
 			setReturn(r.Context(), handlerReturn{i: 403, err: err})
 			return
@@ -26,18 +25,12 @@ func (drt *Directive) assertRepoMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (drt *Directive) getOwnerRepo(r *http.Request) (owner string, name string) {
-	owner, name = drt.repo.owner, drt.repo.name
-	if !drt.repo.ownerStatic {
-		owner = chi.URLParam(r, owner)
+func (drt *Directive) assertRepo(req *http.Request) (err error) {
+	if drt.repo == nil {
+		return errUnauthorized
 	}
-	if !drt.repo.nameStatic {
-		name = chi.URLParam(r, name)
-	}
-	return
-}
+	owner, reponame := drt.getRepo(req)
 
-func (drt *Directive) assertRepo(req *http.Request, owner string, reponame string) (err error) {
 	gcli := drt.newGiteaClient(req)
 	_, err = gcli.GetRepo(owner, reponame)
 	if err != nil {
@@ -48,5 +41,20 @@ func (drt *Directive) assertRepo(req *http.Request, owner string, reponame strin
 		return errUnauthorized
 	}
 
+	return
+}
+
+func (drt *Directive) getRepo(r *http.Request) (owner string, name string) {
+	if drt.repo == nil {
+		return
+	}
+
+	owner, name = drt.repo.owner, drt.repo.name
+	if !drt.repo.ownerStatic {
+		owner = chi.URLParam(r, owner)
+	}
+	if !drt.repo.nameStatic {
+		name = chi.URLParam(r, name)
+	}
 	return
 }

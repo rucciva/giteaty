@@ -8,9 +8,10 @@ type authz string
 
 const (
 	authzNone       authz = "none"
-	authzUsers      authz = "users"
+	authzUser       authz = "user"
 	authzRepo       authz = "repo"
 	authzOrg        authz = "org"
+	authzUsers      authz = "users"
 	authzRepoOrOrg  authz = "repoOrOrg"
 	authzRepoAndOrg authz = "repoAndOrg"
 	authzDeny       authz = "deny"
@@ -18,9 +19,10 @@ const (
 
 var authzs = map[authz]bool{
 	authzNone:       true,
-	authzUsers:      true,
+	authzUser:       true,
 	authzRepo:       true,
 	authzOrg:        true,
+	authzUsers:      true,
 	authzRepoOrOrg:  true,
 	authzRepoAndOrg: true,
 	authzDeny:       true,
@@ -37,9 +39,10 @@ type Directive struct {
 
 	setBasicAuth *string
 	realm        string
-	users        map[string]bool
+	user         *userConfig
 	repo         *repoConfig
 	org          *orgConfig
+	users        map[string]bool
 }
 
 func (drt *Directive) handler(next http.Handler) http.Handler {
@@ -52,6 +55,10 @@ func (drt *Directive) handler(next http.Handler) http.Handler {
 	userAsserted := false
 	switch drt.authz {
 	case authzNone:
+		m = drt.assertUserMiddleware
+		userAsserted = true
+
+	case authzUser:
 		m = drt.assertUserMiddleware
 		userAsserted = true
 

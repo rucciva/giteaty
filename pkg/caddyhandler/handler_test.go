@@ -321,18 +321,35 @@ func TestAssertUsers(t *testing.T) {
 
 			users user user1
 		}
+		giteaty {{.URL}} {
+			paths /test/{user}
+			authz user
+
+			user
+		}
+		giteaty {{.URL}} {
+			paths /ops/*
+			authz user
+
+			user myuser
+		}
 	`
 
-	data := []struct{ path string }{
-		{path: "/dev/test/name"},
-		{path: "/dev/sya"},
+	data := []struct {
+		path string
+		user string
+	}{
+		{path: "/dev/test/name", user: "user"},
+		{path: "/dev/sya", user: "user"},
+		{path: "/test/syalala", user: "syalala"},
+		{path: "/ops/syalala", user: "myuser"},
 	}
 
 	for _, d := range data {
 		t.Run("Success"+d.path, func(t *testing.T) {
-			user, pass := "user", "pass"
+			user, pass := d.user, "pass"
 			ress := []testResponse{
-				{200, nil, &gitea.User{UserName: user}},
+				{200, nil, &gitea.User{UserName: d.user}},
 			}
 
 			w := &httptest.ResponseRecorder{}

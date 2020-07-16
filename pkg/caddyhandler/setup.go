@@ -161,6 +161,22 @@ func parseBlock(c *caddy.Controller, drt *Directive) (err error) {
 			}
 			drt.org.name, drt.org.nameStatic = parsePathParameterName(args[0])
 
+		case "user":
+			if drt.user != nil {
+				return fmt.Errorf("can only have one 'user' section")
+			}
+			drt.user = &userConfig{
+				name: "user",
+			}
+			args := c.RemainingArgs()
+			if len(args) > 1 {
+				return fmt.Errorf("user only takes max 1 args")
+			}
+			if len(args) == 0 {
+				break
+			}
+			drt.user.name, drt.user.nameStatic = parsePathParameterName(args[0])
+
 		case "{":
 			switch prevSection {
 			case "org":

@@ -28,9 +28,13 @@ func TestParseDirectives(t *testing.T) {
 		},
 		{
 			input: `
-			giteaty https://gitea.io/
+			giteaty https://gitea.io/ {
+				noauth
+			}
 			giteaty https://gitea.io/ {
 				insecure
+				realm somewebsite
+
 				paths /test1 /test2
 				methods gEt pOsT
 				authz users
@@ -46,6 +50,7 @@ func TestParseDirectives(t *testing.T) {
 
 				repo {user} test 
 				org {user}
+				user {user}
 			}
 			`,
 			directives: []*Directive{
@@ -53,10 +58,12 @@ func TestParseDirectives(t *testing.T) {
 					giteaURL: "https://gitea.io",
 					paths:    []string{"/"},
 					authz:    authzNone,
+					noauth:   true,
 				},
 				{
 					giteaURL: "https://gitea.io",
 					insecure: true,
+					realm:    "somewebsite",
 					paths:    []string{"/test1", "/test2"},
 					methods:  []string{http.MethodGet, http.MethodPost},
 					authz:    authzUsers,
@@ -71,8 +78,10 @@ func TestParseDirectives(t *testing.T) {
 						owner: "user", name: "test", nameStatic: true,
 					},
 					org: &orgConfig{
-						name:  "user",
-						teams: map[string]bool{"owners": true},
+						name: "user",
+					},
+					user: &userConfig{
+						name: "user",
 					},
 				},
 			},

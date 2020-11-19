@@ -67,17 +67,8 @@ func parseBlock(c *caddy.Controller, drt *Directive) (err error) {
 			if drt.insecure {
 				return fmt.Errorf("can only have one 'insecure' section")
 			}
+			c.RemainingArgs()
 			drt.insecure = true
-
-		case "setBasicAuth":
-			if drt.setBasicAuth != nil {
-				return fmt.Errorf("can only have one 'setBasicAuth' section")
-			}
-			args := c.RemainingArgs()
-			if len(args) != 1 {
-				return fmt.Errorf("setBasicAuth take 1 password arg")
-			}
-			drt.setBasicAuth = &args[0]
 
 		case "paths":
 			drt.paths = append(drt.paths, c.RemainingArgs()...)
@@ -87,13 +78,12 @@ func parseBlock(c *caddy.Controller, drt *Directive) (err error) {
 				drt.methods = append(drt.methods, strings.ToUpper(arg))
 			}
 
-		case "users":
-			if drt.users == nil {
-				drt.users = make(map[string]bool)
+		case "noauth":
+			if drt.noauth {
+				return fmt.Errorf("can only have one 'noauth' section")
 			}
-			for _, arg := range c.RemainingArgs() {
-				drt.users[arg] = true
-			}
+			c.RemainingArgs()
+			drt.noauth = true
 
 		case "authz":
 			if azIsSet {
@@ -108,6 +98,34 @@ func parseBlock(c *caddy.Controller, drt *Directive) (err error) {
 			}
 			drt.authz = authz(args[0])
 			azIsSet = true
+
+		case "realm":
+			if drt.realm != "" {
+				return fmt.Errorf("can only have one 'realm' section")
+			}
+			args := c.RemainingArgs()
+			if len(args) != 1 {
+				return fmt.Errorf("'realm' only take 1 arg")
+			}
+			drt.realm = args[0]
+
+		case "setBasicAuth":
+			if drt.setBasicAuth != nil {
+				return fmt.Errorf("can only have one 'setBasicAuth' section")
+			}
+			args := c.RemainingArgs()
+			if len(args) != 1 {
+				return fmt.Errorf("setBasicAuth take 1 password arg")
+			}
+			drt.setBasicAuth = &args[0]
+
+		case "users":
+			if drt.users == nil {
+				drt.users = make(map[string]bool)
+			}
+			for _, arg := range c.RemainingArgs() {
+				drt.users[arg] = true
+			}
 
 		case "repo":
 			if drt.repo != nil {
@@ -132,8 +150,7 @@ func parseBlock(c *caddy.Controller, drt *Directive) (err error) {
 				return fmt.Errorf("can only have one 'org' section")
 			}
 			drt.org = &orgConfig{
-				name:  "org",
-				teams: map[string]bool{"owners": true},
+				name: "org",
 			}
 			args := c.RemainingArgs()
 			if len(args) > 1 {
@@ -143,6 +160,22 @@ func parseBlock(c *caddy.Controller, drt *Directive) (err error) {
 				break
 			}
 			drt.org.name, drt.org.nameStatic = parsePathParameterName(args[0])
+
+		case "user":
+			if drt.user != nil {
+				return fmt.Errorf("can only have one 'user' section")
+			}
+			drt.user = &userConfig{
+				name: "user",
+			}
+			args := c.RemainingArgs()
+			if len(args) > 1 {
+				return fmt.Errorf("user only takes max 1 args")
+			}
+			if len(args) == 0 {
+				break
+			}
+			drt.user.name, drt.user.nameStatic = parsePathParameterName(args[0])
 
 		case "{":
 			switch prevSection {
@@ -174,21 +207,18 @@ func parsePathParameterName(s string) (p string, static bool) {
 }
 
 func parseOrgSubBlock(c *caddy.Controller, drt *Directive) (err error) {
-	delete(drt.org.teams, "owners")
-
 	for next := c.Next(); next && c.Val() != "}"; next = c.Next() {
 		switch v := c.Val(); v {
 		case "teams":
+			if drt.org.teams == nil {
+				drt.org.teams = make(map[string]bool)
+			}
 			for _, arg := range c.RemainingArgs() {
 				drt.org.teams[strings.ToLower(arg)] = true
 			}
 		default:
 			return fmt.Errorf("unknwon keyword '%s' in 'org' block", v)
 		}
-	}
-
-	if len(drt.org.teams) == 0 {
-		drt.org.teams["owners"] = true
 	}
 	return
 }

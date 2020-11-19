@@ -14,9 +14,9 @@ type orgConfig struct {
 	teams      map[string]bool
 }
 
-func (drt *Directive) assertOrgTeamMiddleware(next http.Handler) http.Handler {
+func (drt *Directive) assertOrgMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		err := drt.assertOrgTeam(r, drt.getOrg(r))
+		err := drt.assertOrg(r)
 		if err != nil {
 			setReturn(r.Context(), handlerReturn{i: 403, err: err})
 			return
@@ -25,26 +25,54 @@ func (drt *Directive) assertOrgTeamMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (drt *Directive) getOrg(r *http.Request) (name string) {
-	name = drt.org.name
-	if !drt.org.nameStatic {
-		name = chi.URLParam(r, name)
+func (drt *Directive) assertOrg(req *http.Request) (err error) {
+	if drt.org == nil {
+		return errUnauthorized
 	}
-	return
+	if len(drt.org.teams) > 0 {
+		return drt.assertOrgTeam(req)
+	}
+	orgname := drt.getOrg(req)
+
+	gcl := drt.newGiteaClient(req)
+	orgs, err := gcl.ListMyOrgs(gitea.ListOrgsOptions{})
+	if err != nil {
+		return errUnauthorized
+	}
+	for _, org := range orgs {
+		if strings.EqualFold(orgname, org.UserName) {
+			return
+		}
+	}
+	return errUnauthorized
 }
 
-func (drt *Directive) assertOrgTeam(req *http.Request, orgname string) (err error) {
+func (drt *Directive) assertOrgTeam(req *http.Request) (err error) {
+	orgname := drt.getOrg(req)
 	gcl := drt.newGiteaClient(req)
 	teams, err := gcl.ListMyTeams(&gitea.ListTeamsOptions{})
 	if err != nil {
 		return errUnauthorized
 	}
 	for _, team := range teams {
-		if strings.EqualFold(team.Organization.UserName, orgname) {
-			if _, ok := drt.org.teams[strings.ToLower(team.Name)]; ok {
-				return
-			}
+		if !strings.EqualFold(team.Organization.UserName, orgname) {
+			continue
+		}
+		if _, ok := drt.org.teams[strings.ToLower(team.Name)]; ok {
+			return
 		}
 	}
 	return errUnauthorized
+}
+
+func (drt *Directive) getOrg(r *http.Request) (name string) {
+	if drt.org == nil {
+		return
+	}
+
+	name = drt.org.name
+	if !drt.org.nameStatic {
+		name = chi.URLParam(r, name)
+	}
+	return
 }

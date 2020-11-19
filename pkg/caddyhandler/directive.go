@@ -8,9 +8,10 @@ type authz string
 
 const (
 	authzNone       authz = "none"
-	authzUsers      authz = "users"
+	authzUser       authz = "user"
 	authzRepo       authz = "repo"
 	authzOrg        authz = "org"
+	authzUsers      authz = "users"
 	authzRepoOrOrg  authz = "repoOrOrg"
 	authzRepoAndOrg authz = "repoAndOrg"
 	authzDeny       authz = "deny"
@@ -18,9 +19,10 @@ const (
 
 var authzs = map[authz]bool{
 	authzNone:       true,
-	authzUsers:      true,
+	authzUser:       true,
 	authzRepo:       true,
 	authzOrg:        true,
+	authzUsers:      true,
 	authzRepoOrOrg:  true,
 	authzRepoAndOrg: true,
 	authzDeny:       true,
@@ -30,22 +32,33 @@ type Directive struct {
 	giteaURL string
 	insecure bool
 
-	paths        []string
-	methods      []string
-	setBasicAuth *string
+	paths   []string
+	methods []string
+	noauth  bool
+	authz   authz
 
-	authz authz
-	users map[string]bool
-	repo  *repoConfig
-	org   *orgConfig
+	setBasicAuth *string
+	realm        string
+	user         *userConfig
+	repo         *repoConfig
+	org          *orgConfig
+	users        map[string]bool
 }
 
 func (drt *Directive) handler(next http.Handler) http.Handler {
+	if drt.noauth {
+		return next
+	}
+
 	var m func(http.Handler) http.Handler
 
 	userAsserted := false
 	switch drt.authz {
 	case authzNone:
+		m = drt.assertUserMiddleware
+		userAsserted = true
+
+	case authzUser:
 		m = drt.assertUserMiddleware
 		userAsserted = true
 
@@ -57,7 +70,7 @@ func (drt *Directive) handler(next http.Handler) http.Handler {
 		m = drt.assertRepoMiddleware
 
 	case authzOrg:
-		m = drt.assertOrgTeamMiddleware
+		m = drt.assertOrgMiddleware
 
 	case authzRepoOrOrg:
 		m = drt.assertRepoOrOrgMiddleware
@@ -72,7 +85,7 @@ func (drt *Directive) handler(next http.Handler) http.Handler {
 	if drt.setBasicAuth != nil && !userAsserted {
 		next = drt.assertUserMiddleware(next)
 	}
-	return drt.assertLoginMiddleware(m(next))
+	return drt.wwwAuthenticate(m(next))
 }
 
 func (drt *Directive) denyMiddleware(next http.Handler) http.Handler {
@@ -81,17 +94,19 @@ func (drt *Directive) denyMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (drt *Directive) assertLoginMiddleware(next http.Handler) http.Handler {
+func (drt *Directive) wwwAuthenticate(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		next.ServeHTTP(w, r)
 
-		ret := getReturn(r.Context())
-		if ret == nil || ret.auth {
+		if drt.realm == "" {
 			return
 		}
-
-		// just ask password so that basic auth form always be displayed
+		ret := getReturn(r.Context())
+		if ret == nil || ret.next {
+			return
+		}
+		// just ask password so that basic auth form always get displayed
+		w.Header().Set("WWW-Authenticate", `Basic realm="`+drt.realm+`"`)
 		ret.i = 401
-		w.Header().Set("WWW-Authenticate", `Basic realm="Restricted"`)
 	})
 }

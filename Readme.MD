@@ -8,7 +8,7 @@ Expose gitea users' identity through:
 
 ## LDAP Server
 
-Look at [docker-compose.yml](build/docker/docker-compose.yml) for refference on how to run the LDAP Server
+Look at [docker-compose.yml](build/docker/docker-compose.yml#L78) for refference on how to run the LDAP Server
 
 ## Caddy Plugin
 

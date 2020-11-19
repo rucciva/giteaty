@@ -63,6 +63,7 @@ func tNewHandler(t *testing.T, conf string, ress []testResponse) (h *testHandler
 
 	next := httpserver.HandlerFunc(func(w http.ResponseWriter, r *http.Request) (i int, err error) {
 		h.reqFwd = r
+		w.Header().Set("next", "true")
 		return 201, nil
 	})
 	h.handler, _ = httpserver.GetConfig(c).Middleware()[0](next).(*handler)
@@ -91,6 +92,10 @@ func (h testHandler) mustAssertOrgTeams(t *testing.T, req *http.Request) {
 	assert.Equal(t, "/api/v1/user/teams", req.URL.Path, "should call get repo branches api")
 	assert.Equal(t, http.MethodGet, req.Method, "should call get repo branches api")
 }
+func (h testHandler) mustAssertOrg(t *testing.T, req *http.Request) {
+	assert.Equal(t, "/api/v1/user/orgs", req.URL.Path, "should call get repo branches api")
+	assert.Equal(t, http.MethodGet, req.Method, "should call get repo branches api")
+}
 
 func (h testHandler) mustUseBasicAuth(t *testing.T, req *http.Request, user string, pass string) {
 	u, p, ok := req.BasicAuth()
@@ -99,15 +104,39 @@ func (h testHandler) mustUseBasicAuth(t *testing.T, req *http.Request, user stri
 	assert.True(t, ok, "should pass basic auth")
 }
 
+func (h testHandler) mustUseToken(t *testing.T, req *http.Request, token string) {
+	tok := req.Header.Get("Authorization")
+	if tok != "" {
+		v := strings.Split(tok, " ")
+		require.Len(t, v, 2)
+		assert.Equal(t, "token", v[0])
+		assert.Equal(t, token, v[1])
+		return
+	}
+	tok = req.URL.Query().Get("access_token")
+	if tok != "" {
+		assert.Equal(t, token, tok)
+		return
+	}
+	tok = req.URL.Query().Get("token")
+	if tok != "" {
+		assert.Equal(t, token, tok)
+		return
+	}
+	t.Error("no token found")
+}
+
+func (h testHandler) mustNotModifyNextResponse(t *testing.T, w *httptest.ResponseRecorder) {
+	assert.Equal(t, w.Code, 0, "should not write status code")
+	assert.Nil(t, w.Body, "should not write body")
+	// header set by next
+	assert.Equal(t, "true", w.Header().Get("next"), "should not write header")
+	assert.Len(t, w.Header(), 1, "should not write header")
+}
+
 func (h testHandler) mustNotWriteResponse(t *testing.T, w *httptest.ResponseRecorder) {
 	assert.Equal(t, w.Code, 0, "should not write status code")
 	assert.Empty(t, w.Header(), "should not write header")
-	assert.Nil(t, w.Body, "should not write body")
-}
-func (h testHandler) mustWriteWWWAuthenticate(t *testing.T, w *httptest.ResponseRecorder) {
-	assert.Equal(t, w.Code, 0, "should not write status code")
-	assert.Equal(t, `Basic realm="Restricted"`, w.Header().Get("WWW-Authenticate"), "should not write header")
-	assert.Len(t, w.Header(), 1)
 	assert.Nil(t, w.Body, "should not write body")
 }
 
@@ -133,13 +162,13 @@ func (h testHandler) mustForwardReqWithCustomBasicAuthPass(t *testing.T, r *http
 	h.mustForwardReq(t, r)
 }
 
-func (h testHandler) mustRelayNextResponse(t *testing.T, i int, err error) {
+func (h testHandler) mustForwardNextReturn(t *testing.T, i int, err error) {
 	require.Equal(t, nil, err, "should pass error from next middleware")
 	assert.Equal(t, 201, i, "should pass return code from next middleware")
 }
 
 func (h testHandler) mustNotForwardRequest(t *testing.T, i int, err error) {
-	assert.Equal(t, 401, i)
+	assert.Equal(t, 403, i)
 	assert.Error(t, err)
 	assert.Nil(t, h.reqFwd)
 }
@@ -150,16 +179,36 @@ func (h testHandler) mustDenyRequest(t *testing.T, i int, err error) {
 	assert.Nil(t, h.reqFwd)
 }
 
+func (h testHandler) mustWriteWWWAuthenticate(t *testing.T, w *httptest.ResponseRecorder, realm string) {
+	b := fmt.Sprintf(`Basic realm="%s"`, realm)
+	assert.Equal(t, 0, w.Code, "should not write status code")
+	assert.Equal(t, b, w.Header().Get("WWW-Authenticate"), "should not write header")
+	assert.Len(t, w.Header(), 1)
+	assert.Nil(t, w.Body, "should not write body")
+}
+
+func (h testHandler) mustNotForwardRequestAndReturn401(t *testing.T, i int, err error) {
+	assert.Equal(t, 401, i)
+	assert.Error(t, err)
+	assert.Nil(t, h.reqFwd)
+}
+
 func TestHandlerPassthroughOrDeny(t *testing.T) {
 	conf := `
 		giteaty {{.URL}} {
 			paths  /test /test/* /dev /dev/*
 			authz deny
 		}
+		giteaty {{.URL}} {
+			paths /test/123 /dev/123
+			noauth
+		}
 	`
 
 	data := []struct{ path string }{
 		{path: "/"},
+		{path: "/dev/123"},
+		{path: "/test/123"},
 		{path: "/tester"},
 		{path: "/tester/something"},
 		{path: "/tester/something/else"},
@@ -174,9 +223,9 @@ func TestHandlerPassthroughOrDeny(t *testing.T) {
 			r := httptest.NewRequest(http.MethodGet, d.path, strings.NewReader(`{"message" : "hi"}`))
 			h := tNewHandler(t, conf, nil)
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
-			h.mustRelayNextResponse(t, i, err)
-			h.mustNotWriteResponse(t, w)
 			h.mustForwardReq(t, r)
+			h.mustForwardNextReturn(t, i, err)
+			h.mustNotModifyNextResponse(t, w)
 			require.Len(t, h.reqGitea, 0, "should not call gitea API")
 		})
 	}
@@ -233,9 +282,9 @@ func TestHandlerAssertUser(t *testing.T) {
 			h := tNewHandler(t, conf, ress)
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
 
-			h.mustRelayNextResponse(t, i, err)
-			h.mustNotWriteResponse(t, w)
 			h.mustForwardReq(t, r)
+			h.mustForwardNextReturn(t, i, err)
+			h.mustNotModifyNextResponse(t, w)
 			require.Len(t, h.reqGitea, 1, "should call gitea API exactly once")
 			h.mustAssertUser(t, h.reqGitea[0])
 			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
@@ -256,7 +305,7 @@ func TestHandlerAssertUser(t *testing.T) {
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
 
 			h.mustNotForwardRequest(t, i, err)
-			h.mustWriteWWWAuthenticate(t, w)
+			h.mustNotWriteResponse(t, w)
 			require.Len(t, h.reqGitea, 1, "should call gitea API exactly once")
 			h.mustAssertUser(t, h.reqGitea[0])
 			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
@@ -272,18 +321,35 @@ func TestAssertUsers(t *testing.T) {
 
 			users user user1
 		}
+		giteaty {{.URL}} {
+			paths /test/{user}
+			authz user
+
+			user
+		}
+		giteaty {{.URL}} {
+			paths /ops/*
+			authz user
+
+			user myuser
+		}
 	`
 
-	data := []struct{ path string }{
-		{path: "/dev/test/name"},
-		{path: "/dev/sya"},
+	data := []struct {
+		path string
+		user string
+	}{
+		{path: "/dev/test/name", user: "user"},
+		{path: "/dev/sya", user: "user"},
+		{path: "/test/syalala", user: "syalala"},
+		{path: "/ops/syalala", user: "myuser"},
 	}
 
 	for _, d := range data {
 		t.Run("Success"+d.path, func(t *testing.T) {
-			user, pass := "user", "pass"
+			user, pass := d.user, "pass"
 			ress := []testResponse{
-				{200, nil, &gitea.User{UserName: user}},
+				{200, nil, &gitea.User{UserName: d.user}},
 			}
 
 			w := &httptest.ResponseRecorder{}
@@ -292,9 +358,9 @@ func TestAssertUsers(t *testing.T) {
 			h := tNewHandler(t, conf, ress)
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
 
-			h.mustRelayNextResponse(t, i, err)
-			h.mustNotWriteResponse(t, w)
 			h.mustForwardReq(t, r)
+			h.mustForwardNextReturn(t, i, err)
+			h.mustNotModifyNextResponse(t, w)
 			require.Len(t, h.reqGitea, 1, "should call gitea API exactly once")
 			h.mustAssertUser(t, h.reqGitea[0])
 			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
@@ -315,7 +381,7 @@ func TestAssertUsers(t *testing.T) {
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
 
 			h.mustNotForwardRequest(t, i, err)
-			h.mustWriteWWWAuthenticate(t, w)
+			h.mustNotWriteResponse(t, w)
 			require.Len(t, h.reqGitea, 1, "should call gitea API exactly once")
 			h.mustAssertUser(t, h.reqGitea[0])
 			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
@@ -382,9 +448,9 @@ func TestHandlerAssertRepo(t *testing.T) {
 			h := tNewHandler(t, conf, ress)
 
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
-			h.mustRelayNextResponse(t, i, err)
-			h.mustNotWriteResponse(t, w)
 			h.mustForwardReq(t, r)
+			h.mustForwardNextReturn(t, i, err)
+			h.mustNotModifyNextResponse(t, w)
 			require.Len(t, h.reqGitea, 2, "should call gitea API twice")
 			h.mustAssertRepo(t, h.reqGitea[0], d.owner, d.repo)
 			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
@@ -407,7 +473,7 @@ func TestHandlerAssertRepo(t *testing.T) {
 
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
 			h.mustNotForwardRequest(t, i, err)
-			h.mustWriteWWWAuthenticate(t, w)
+			h.mustNotWriteResponse(t, w)
 			require.Len(t, h.reqGitea, 1, "should call gitea API once")
 			h.mustAssertRepo(t, h.reqGitea[0], d.owner, d.repo)
 			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
@@ -429,7 +495,7 @@ func TestHandlerAssertRepo(t *testing.T) {
 
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
 			h.mustNotForwardRequest(t, i, err)
-			h.mustWriteWWWAuthenticate(t, w)
+			h.mustNotWriteResponse(t, w)
 			require.Len(t, h.reqGitea, 2, "should call gitea API once")
 			h.mustAssertRepo(t, h.reqGitea[0], d.owner, d.repo)
 			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
@@ -474,27 +540,34 @@ func TestHandlerAssertOrg(t *testing.T) {
 		org   string
 		teams []string
 	}{
-		{"/dev/someorg", "someorg", []string{"Owners"}},
+		{"/dev/someorg", "someorg", nil},
 
-		{"/test/something/someorg", "someorg", []string{"Owners"}},
-		{"/test/something/someorg/syalala", "someorg", []string{"Owners"}},
+		{"/test/something/someorg", "someorg", nil},
+		{"/test/something/someorg/syalala", "someorg", nil},
 
 		{"/ops/something/someorg", "someorg", []string{"dev"}},
 		{"/ops/something/someorg", "someorg", []string{"ops"}},
 		{"/ops/something/someorg", "someorg", []string{"sec"}},
 
-		{"/qa", "someorg1", []string{"owners"}},
-		{"/qa/syalala/lala", "someorg1", []string{"owners"}},
+		{"/qa", "someorg1", nil},
+		{"/qa/syalala/lala", "someorg1", nil},
+	}
+
+	giteaRess := func(org string, teams []string) []testResponse {
+		if len(teams) == 0 {
+			return []testResponse{{200, nil, []*gitea.Organization{{UserName: org}}}}
+		}
+		ts := []*gitea.Team{}
+		for _, team := range teams {
+			t := &gitea.Team{Name: team, Organization: &gitea.Organization{UserName: org}}
+			ts = append(ts, t)
+		}
+		return []testResponse{{200, nil, ts}}
 	}
 	for _, d := range data {
 		t.Run("Success#"+d.path, func(t *testing.T) {
 			user, pass := "user", "pass"
-			teams := []*gitea.Team{}
-			for _, team := range d.teams {
-				t := &gitea.Team{Name: team, Organization: &gitea.Organization{UserName: d.org}}
-				teams = append(teams, t)
-			}
-			ress := []testResponse{{200, nil, teams}}
+			ress := giteaRess(d.org, d.teams)
 
 			w := &httptest.ResponseRecorder{}
 			r := httptest.NewRequest(http.MethodGet, d.path, strings.NewReader(`{"message" : "hi"}`))
@@ -502,11 +575,16 @@ func TestHandlerAssertOrg(t *testing.T) {
 			h := tNewHandler(t, conf, ress)
 
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
-			h.mustRelayNextResponse(t, i, err)
-			h.mustNotWriteResponse(t, w)
 			h.mustForwardReq(t, r)
+			h.mustForwardNextReturn(t, i, err)
+			h.mustNotModifyNextResponse(t, w)
 			require.Len(t, h.reqGitea, 1, "should call gitea API once")
-			h.mustAssertOrgTeams(t, h.reqGitea[0])
+			switch len(d.teams) {
+			case 0:
+				h.mustAssertOrg(t, h.reqGitea[0])
+			default:
+				h.mustAssertOrgTeams(t, h.reqGitea[0])
+			}
 			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
 		})
 	}
@@ -523,19 +601,30 @@ func TestHandlerAssertOrg(t *testing.T) {
 
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
 			h.mustNotForwardRequest(t, i, err)
-			h.mustWriteWWWAuthenticate(t, w)
+			h.mustNotWriteResponse(t, w)
 			require.Len(t, h.reqGitea, 1, "should call gitea API once")
-			h.mustAssertOrgTeams(t, h.reqGitea[0])
+			switch len(d.teams) {
+			case 0:
+				h.mustAssertOrg(t, h.reqGitea[0])
+			default:
+				h.mustAssertOrgTeams(t, h.reqGitea[0])
+			}
 			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
-
 		})
 	}
 
 	for _, d := range data {
 		t.Run("NotMemberOf#"+d.path, func(t *testing.T) {
 			user, pass := "user", "pass"
-			ress := []testResponse{
-				{200, nil, []*gitea.Team{{Name: "noone", Organization: &gitea.Organization{UserName: d.org}}}},
+			var ress []testResponse
+			switch len(d.teams) {
+			case 0:
+				ress = []testResponse{{200, nil, []*gitea.Organization{{UserName: "noone"}}}}
+			default:
+				ress = []testResponse{{200, nil, []*gitea.Team{
+					{Name: "noone", Organization: &gitea.Organization{UserName: d.org}},
+					{Name: "noone", Organization: &gitea.Organization{UserName: "noone"}},
+				}}}
 			}
 
 			w := &httptest.ResponseRecorder{}
@@ -545,9 +634,14 @@ func TestHandlerAssertOrg(t *testing.T) {
 
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
 			h.mustNotForwardRequest(t, i, err)
-			h.mustWriteWWWAuthenticate(t, w)
+			h.mustNotWriteResponse(t, w)
 			require.Len(t, h.reqGitea, 1, "should call gitea API once")
-			h.mustAssertOrgTeams(t, h.reqGitea[0])
+			switch len(d.teams) {
+			case 0:
+				h.mustAssertOrg(t, h.reqGitea[0])
+			default:
+				h.mustAssertOrgTeams(t, h.reqGitea[0])
+			}
 			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
 		})
 	}
@@ -561,7 +655,9 @@ func TestHandlerRepoOrOrgSetBasicAuth(t *testing.T) {
 			authz repoOrOrg
 
 			repo user name
-			org org
+			org org {
+				teams Owners
+			}
 		}
 	`
 
@@ -587,9 +683,9 @@ func TestHandlerRepoOrOrgSetBasicAuth(t *testing.T) {
 			h := tNewHandler(t, conf, ress)
 
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
-			h.mustRelayNextResponse(t, i, err)
-			h.mustNotWriteResponse(t, w)
 			h.mustForwardReqWithCustomBasicAuthPass(t, r, "syala")
+			h.mustForwardNextReturn(t, i, err)
+			h.mustNotModifyNextResponse(t, w)
 			require.Len(t, h.reqGitea, 3, "should call gitea API trice")
 			h.mustAssertRepo(t, h.reqGitea[0], "user", "name")
 			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
@@ -609,7 +705,9 @@ func TestHandlerRepoAndOrgSetBasicAuth(t *testing.T) {
 			authz repoAndOrg
 
 			repo user name
-			org org
+			org org {
+				teams Owners
+			}
 		}
 	`
 
@@ -636,9 +734,9 @@ func TestHandlerRepoAndOrgSetBasicAuth(t *testing.T) {
 			h := tNewHandler(t, conf, ress)
 
 			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
-			h.mustRelayNextResponse(t, i, err)
-			h.mustNotWriteResponse(t, w)
 			h.mustForwardReqWithCustomBasicAuthPass(t, r, "syala")
+			h.mustForwardNextReturn(t, i, err)
+			h.mustNotModifyNextResponse(t, w)
 			require.Len(t, h.reqGitea, 4, "should call gitea API trice")
 			h.mustAssertRepo(t, h.reqGitea[0], "user", "name")
 			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
@@ -648,6 +746,100 @@ func TestHandlerRepoAndOrgSetBasicAuth(t *testing.T) {
 			h.mustUseBasicAuth(t, h.reqGitea[2], user, pass)
 			h.mustAssertUser(t, h.reqGitea[3])
 			h.mustUseBasicAuth(t, h.reqGitea[3], user, pass)
+		})
+	}
+}
+
+func TestHandlerWWWAuthenticate(t *testing.T) {
+	conf := `
+		giteaty  {{.URL}} {
+			paths /*
+			realm somewebsite
+		}
+	`
+
+	data := []struct {
+		path string
+	}{
+		{path: "/lala"},
+		{path: "/syalala"},
+	}
+
+	for _, d := range data {
+		t.Run("Success"+d.path, func(t *testing.T) {
+			user, pass := "user", "pass"
+			ress := []testResponse{
+				{200, nil, &gitea.User{UserName: user}},
+			}
+
+			w := &httptest.ResponseRecorder{}
+			r := httptest.NewRequest(http.MethodGet, d.path, strings.NewReader(`{"message" : "hi"}`))
+			r.SetBasicAuth(user, pass)
+			h := tNewHandler(t, conf, ress)
+			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
+
+			h.mustForwardReq(t, r)
+			h.mustForwardNextReturn(t, i, err)
+			h.mustNotModifyNextResponse(t, w)
+			require.Len(t, h.reqGitea, 1, "should call gitea API exactly once")
+			h.mustAssertUser(t, h.reqGitea[0])
+			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
+		})
+	}
+	for _, d := range data {
+		t.Run("Unauthorized"+d.path, func(t *testing.T) {
+			user, pass := "user", "pass"
+			ress := []testResponse{
+				{404, nil, map[string]interface{}{"message": "Notfound"}},
+			}
+
+			w := &httptest.ResponseRecorder{}
+			r := httptest.NewRequest(http.MethodGet, d.path, strings.NewReader(`{"message" : "hi"}`))
+			r.SetBasicAuth(user, pass)
+			h := tNewHandler(t, conf, ress)
+			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
+
+			h.mustWriteWWWAuthenticate(t, w, "somewebsite")
+			h.mustNotForwardRequestAndReturn401(t, i, err)
+			require.Len(t, h.reqGitea, 1, "should call gitea API exactly once")
+			h.mustAssertUser(t, h.reqGitea[0])
+			h.mustUseBasicAuth(t, h.reqGitea[0], user, pass)
+		})
+	}
+}
+
+func TestTokenViaBasicAuth(t *testing.T) {
+	conf := `
+	giteaty {{.URL}} {
+		paths /test /test/*
+	}
+	`
+
+	data := []struct{ path string }{
+		{path: "/test"},
+		{path: "/test/something"},
+		{path: "/test/something/else"},
+	}
+
+	for _, d := range data {
+		t.Run("Success"+d.path, func(t *testing.T) {
+			token := "123456"
+			ress := []testResponse{
+				{200, nil, &gitea.User{UserName: "someuser"}},
+			}
+
+			w := &httptest.ResponseRecorder{}
+			r := httptest.NewRequest(http.MethodGet, d.path, strings.NewReader(`{"message" : "hi"}`))
+			r.SetBasicAuth("", token)
+			h := tNewHandler(t, conf, ress)
+			i, err := h.handler.ServeHTTP(w, r.Clone(r.Context()))
+
+			h.mustForwardReq(t, r)
+			h.mustForwardNextReturn(t, i, err)
+			h.mustNotModifyNextResponse(t, w)
+			require.Len(t, h.reqGitea, 1, "should call gitea API exactly once")
+			h.mustAssertUser(t, h.reqGitea[0])
+			h.mustUseToken(t, h.reqGitea[0], token)
 		})
 	}
 }

@@ -3,14 +3,14 @@
 Expose gitea users' identity through:
 
 - [x] LDAP
-- [x] [Caddy Plugin](https://caddyserver.com/v1/)
+- [x] [Caddy V1 Plugin](https://caddyserver.com/v1/)
 - [ ] OpenID Connect (with [ORY Hydra](https://github.com/ory/hydra))
 
 ## LDAP Server
 
 Look at [docker-compose.yml](build/docker/docker-compose.yml#L78) for refference on how to run the LDAP Server
 
-## Caddy Plugin
+## Caddy V1 Plugin
 
 To use it with caddy, you need to build caddy yourself and include the plugin, such as:
 
@@ -30,6 +30,8 @@ func main() {
 }
 
 ```
+
+Look at the test files to see [examples](pkg/caddyhandler/setup_test.go#L31-L53).
 
 ## Development
 

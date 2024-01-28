@@ -5,7 +5,7 @@ COPY . .
 RUN make generate && make build
 
 
-FROM alpine:3.12
+FROM alpine:3.18.6
 LABEL maintainer="rucciva@gmail.com"
 
 RUN apk add --no-cache ca-certificates
